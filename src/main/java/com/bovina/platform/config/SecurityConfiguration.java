@@ -1,7 +1,9 @@
 package com.bovina.platform.config;
 
+import com.bovina.platform.api.ApiProblems;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -14,7 +16,9 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandler;
 
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfiguration {
@@ -34,7 +38,16 @@ public class SecurityConfiguration {
   }
 
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+  SecurityFilterChain securityFilterChain(HttpSecurity http, ApiProblems problems)
+      throws Exception {
+    AuthenticationEntryPoint unauthenticated =
+        (request, response, exception) -> {
+          response.setHeader("WWW-Authenticate", "Bearer");
+          problems.write(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", request, response);
+        };
+    AccessDeniedHandler forbidden =
+        (request, response, exception) ->
+            problems.write(HttpStatus.FORBIDDEN, "ACCESS_DENIED", request, response);
     // This API accepts bearer tokens, never browser session cookies.
     return http.csrf(AbstractHttpConfigurer::disable)
         .sessionManagement(
@@ -45,7 +58,15 @@ public class SecurityConfiguration {
                     .permitAll()
                     .anyRequest()
                     .authenticated())
-        .oauth2ResourceServer(resource -> resource.jwt(Customizer.withDefaults()))
+        .exceptionHandling(
+            errors ->
+                errors.authenticationEntryPoint(unauthenticated).accessDeniedHandler(forbidden))
+        .oauth2ResourceServer(
+            resource ->
+                resource
+                    .jwt(Customizer.withDefaults())
+                    .authenticationEntryPoint(unauthenticated)
+                    .accessDeniedHandler(forbidden))
         .build();
   }
 }
