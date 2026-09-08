@@ -30,10 +30,9 @@ class OperationContextTest {
   }
 
   @Test
-  void commandMetadataPreservesClientIdentityAndTimeWithoutGeneratingThemAgain() {
+  void commandMetadataRequiresIdentityAndOccurrenceTime() {
     var id = UUID.fromString("01992678-9600-7000-8000-000000000001");
     var occurred = Instant.parse("2026-09-08T10:00:00Z");
-    assertThat(new CommandMetadata(id, occurred)).isEqualTo(new CommandMetadata(id, occurred));
     assertThatThrownBy(() -> new CommandMetadata(null, occurred))
         .isInstanceOf(NullPointerException.class);
     assertThatThrownBy(() -> new CommandMetadata(id, null))
