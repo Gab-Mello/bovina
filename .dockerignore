@@ -1,52 +1,8 @@
-# Trim the Docker build context to the files actually needed for the multi-stage
-# image build. Keeping the context lean means faster `docker build` (less data
-# sent to the daemon) and avoids invalidating the `dependency:go-offline` cache
-# layer when a developer's local `target/` is touched.
-#
-# IMPORTANT: do NOT add the following to this file -- the Dockerfile depends on them:
-#   - mvnw
-#   - .mvn/
-#   - pom.xml
-#   - src/
-
-# --- Build outputs ---
-target/
-*.jar
-*.war
-*.class
-
-# --- Version control ---
-.git/
-.gitignore
-.gitattributes
-
-# --- IDEs ---
-.idea/
-*.iml
-*.ipr
-*.iws
-.vscode/
-.settings/
-.classpath
-.project
-.factorypath
-
-# --- macOS ---
-.DS_Store
-
-# --- Logs and runtime artifacts ---
-*.log
-logs/
-*.pid
-hs_err_pid*
-
-# --- Local study / refactor notes (gitignored too) ---
-REFACTORING_NOTES.md
-
-# --- Project docs not needed inside the build ---
-HELP.md
-README.md
-docker/
-
-# --- Test reports (we run with -DskipTests in the image build) ---
-src/test/
+**
+!pom.xml
+!mvnw
+!.mvn/
+!.mvn/**
+!src/
+!src/**
+# Keep tests in the build stage: package runs unit tests.

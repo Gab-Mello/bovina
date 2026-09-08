@@ -41,9 +41,12 @@ secrets.yml
 .sts4-cache
 .git-hooks/
 node_modules
-src/main/resources/application.properties
+.env
+.env.*
+!.env.example
+*.dump
+logs/
 
 # Local-only refactoring study notes (educational, not source of truth)
 REFACTORING_NOTES.md
 refactoring-notes/
-
