@@ -49,16 +49,22 @@ public final class TrustedTokens implements AutoCloseable {
   }
 
   public String token(String issuer, String audience, Instant expiresAt) throws Exception {
+    return token("test-operator", issuer, audience, expiresAt);
+  }
+
+  public String token(String subject, String issuer, String audience, Instant expiresAt)
+      throws Exception {
+    var claims =
+        new JWTClaimsSet.Builder()
+            .subject(subject)
+            .issuer(issuer)
+            .issueTime(Date.from(Instant.now().minusSeconds(300)));
+    if (audience != null) claims.audience(audience);
+    if (expiresAt != null) claims.expirationTime(Date.from(expiresAt));
     var jwt =
         new SignedJWT(
             new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(key.getKeyID()).build(),
-            new JWTClaimsSet.Builder()
-                .subject("test-operator")
-                .issuer(issuer)
-                .audience(audience)
-                .issueTime(Date.from(Instant.now().minusSeconds(300)))
-                .expirationTime(Date.from(expiresAt))
-                .build());
+            claims.build());
     jwt.sign(new RSASSASigner(key));
     return jwt.serialize();
   }

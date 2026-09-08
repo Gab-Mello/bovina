@@ -68,6 +68,21 @@ class SecurityAndOpenApiIT {
         TOKENS.token(TOKENS.issuer().toString(), "different-api", Instant.now().plusSeconds(300)));
   }
 
+  @Test
+  void rejectsMissingRequiredClaimsAndInvalidSignature() throws Exception {
+    assertUnauthorized(
+        TOKENS.token(TOKENS.issuer().toString(), null, Instant.now().plusSeconds(300)));
+    assertUnauthorized(TOKENS.token(TOKENS.issuer().toString(), "bovina-test", null));
+    assertUnauthorized(
+        TOKENS.token(
+            null, TOKENS.issuer().toString(), "bovina-test", Instant.now().plusSeconds(300)));
+    try (var otherSigner = new TrustedTokens()) {
+      assertUnauthorized(
+          otherSigner.token(
+              TOKENS.issuer().toString(), "bovina-test", Instant.now().plusSeconds(300)));
+    }
+  }
+
   private void assertUnauthorized(String token) throws Exception {
     var response = get("/v3/api-docs", token);
     assertThat(response.statusCode()).isEqualTo(401);

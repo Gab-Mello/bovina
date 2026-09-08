@@ -25,15 +25,19 @@ public class SecurityConfiguration {
   @Bean
   JwtDecoder jwtDecoder(SecurityProperties properties) {
     var decoder = NimbusJwtDecoder.withJwkSetUri(properties.jwkSetUri().toString()).build();
-    OAuth2TokenValidator<Jwt> audience =
+    OAuth2TokenValidator<Jwt> requiredClaims =
         jwt ->
-            jwt.getAudience().contains(properties.audience())
+            jwt.getAudience() != null
+                    && jwt.getAudience().contains(properties.audience())
+                    && jwt.getExpiresAt() != null
+                    && jwt.getSubject() != null
+                    && !jwt.getSubject().isBlank()
                 ? OAuth2TokenValidatorResult.success()
                 : OAuth2TokenValidatorResult.failure(
-                    new OAuth2Error("invalid_token", "Invalid audience", null));
+                    new OAuth2Error("invalid_token", "Invalid required claims", null));
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
-            JwtValidators.createDefaultWithIssuer(properties.issuer().toString()), audience));
+            JwtValidators.createDefaultWithIssuer(properties.issuer().toString()), requiredClaims));
     return decoder;
   }
 
