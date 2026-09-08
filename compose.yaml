@@ -12,7 +12,7 @@ services:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
-      - ./docker/postgres/bootstrap.sh:/docker-entrypoint-initdb.d/10-bovina.sh:ro
+      - ./docker/postgres/bootstrap.sql:/docker-entrypoint-initdb.d/10-bovina.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bovina_bootstrap -d bovina"]
       interval: 3s
@@ -27,7 +27,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: dev
+      SPRING_PROFILES_ACTIVE: ${BOVINA_PROFILE:-dev}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bovina
       SPRING_DATASOURCE_USERNAME: bovina_runtime
       SPRING_DATASOURCE_PASSWORD: ${BOVINA_RUNTIME_PASSWORD:?Set the runtime password}

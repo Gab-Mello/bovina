@@ -14,4 +14,6 @@ COPY --from=build --chown=10001:10001 /workspace/target/bovina.jar /app/bovina.j
 USER 10001:10001
 ENV TZ=UTC
 EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["curl", "--fail", "--silent", "--max-time", "4", "--output", "/dev/null", "http://localhost:8080/actuator/health/readiness"]
 ENTRYPOINT ["java", "-Duser.timezone=UTC", "-jar", "/app/bovina.jar"]
