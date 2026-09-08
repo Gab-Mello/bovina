@@ -18,10 +18,28 @@ export BOVINA_PROFILE=prod
 dc() {
   docker compose --project-name "$project" --env-file /dev/null -f "$script_root/compose.yaml" "$@"
 }
-cleanup() {
+finish() {
+  local result=$? cleanup_result container
+  trap - EXIT
+  set +e
+  if (( result != 0 )); then
+    echo "Smoke failed (exit $result). Diagnostics for $project before cleanup:" >&2
+    docker ps --all --filter "label=com.docker.compose.project=$project" \
+      --format '{{.ID}} {{.Names}} {{.Status}}' >&2
+    for container in $(docker ps --all --quiet --filter "label=com.docker.compose.project=$project"); do
+      docker inspect --format '{{.Name}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}{{if .State.Health}} health={{.State.Health.Status}}{{end}}' "$container" >&2
+      docker logs --timestamps --tail 200 "$container" >&2 2>&1
+    done
+  fi
   dc down --volumes --remove-orphans --timeout 40 >/dev/null 2>&1
+  cleanup_result=$?
+  if (( cleanup_result != 0 )); then
+    echo "Cleanup failed for $project (exit $cleanup_result)." >&2
+    if (( result == 0 )); then result=$cleanup_result; fi
+  fi
+  exit "$result"
 }
-trap cleanup EXIT
+trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
