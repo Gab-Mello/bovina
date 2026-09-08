@@ -66,8 +66,8 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<Object> unexpected(Exception exception, HttpServletRequest request) {
-    // Exception messages may contain SQL parameters or credentials; keep them out of logs.
     LOG.atError()
+        .setCause(exception)
         .addKeyValue("exceptionType", exception.getClass().getName())
         .log("Unhandled request failure");
     return ResponseEntity.internalServerError()

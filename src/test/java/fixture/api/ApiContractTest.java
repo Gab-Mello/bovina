@@ -5,6 +5,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.bovina.platform.api.ApiExceptionHandler;
 import com.bovina.platform.api.ApiProblems;
 import com.bovina.platform.api.RequestCorrelationFilter;
@@ -14,6 +17,7 @@ import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
@@ -73,15 +77,42 @@ class ApiContractTest {
   }
 
   @Test
-  void unexpectedFailureDoesNotLeakSensitiveDetailAndClearsMdc() throws Exception {
+  void unexpectedFailureLogsCorrelatedStackTraceButReturnsSanitizedProblem() throws Exception {
     var id = "01992678-9600-7000-8000-000000000001";
-    mvc.perform(get("/probe/failure").header("X-Correlation-ID", id))
-        .andExpect(status().isInternalServerError())
-        .andExpect(jsonPath("$.detail").value("Internal server error"))
-        .andExpect(jsonPath("$.traceId").value(id))
-        .andExpect(header().string("X-Correlation-ID", id))
-        .andExpect(jsonPath("$.stackTrace").doesNotExist());
-    assertThat(MDC.get("traceId")).isNull();
+    var logger = (Logger) LoggerFactory.getLogger(ApiExceptionHandler.class);
+    var logs =
+        new ListAppender<ILoggingEvent>() {
+          @Override
+          protected void append(ILoggingEvent event) {
+            event.prepareForDeferredProcessing();
+            super.append(event);
+          }
+        };
+    logs.start();
+    logger.addAppender(logs);
+    try {
+      var response =
+          mvc.perform(get("/probe/failure").header("X-Correlation-ID", id))
+              .andExpect(status().isInternalServerError())
+              .andExpect(jsonPath("$.detail").value("Internal server error"))
+              .andExpect(jsonPath("$.traceId").value(id))
+              .andExpect(header().string("X-Correlation-ID", id))
+              .andExpect(jsonPath("$.stackTrace").doesNotExist())
+              .andReturn()
+              .getResponse();
+      assertThat(response.getContentAsString())
+          .doesNotContain("internal-diagnostic-marker", "IllegalStateException");
+      assertThat(logs.list).hasSize(1);
+      var event = logs.list.getFirst();
+      assertThat(event.getMDCPropertyMap()).containsEntry("traceId", id);
+      assertThat(event.getThrowableProxy().getClassName())
+          .isEqualTo(IllegalStateException.class.getName());
+      assertThat(event.getThrowableProxy().getStackTraceElementProxyArray()).isNotEmpty();
+      assertThat(MDC.get("traceId")).isNull();
+    } finally {
+      logger.detachAppender(logs);
+      logs.stop();
+    }
   }
 
   @Test
@@ -107,7 +138,7 @@ class ApiContractTest {
 
     @GetMapping("/probe/failure")
     void failure() {
-      throw new IllegalStateException("password=must-not-leak");
+      throw new IllegalStateException("internal-diagnostic-marker");
     }
   }
 
