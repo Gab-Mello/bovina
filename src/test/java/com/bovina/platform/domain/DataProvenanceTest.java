@@ -31,7 +31,7 @@ class DataProvenanceTest {
   }
 
   @Test
-  void confirmationRequiresBothActorAndTimeAndCannotBeInTheFuture() {
+  void confirmationRequiresBothActorAndTimeAndMayFollowInitialRecording() {
     assertThatThrownBy(
             () ->
                 new DataProvenance(
@@ -43,19 +43,6 @@ class DataProvenanceTest {
                     time,
                     actor,
                     null,
-                    null))
-        .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(
-            () ->
-                new DataProvenance(
-                    DataProvenance.Origin.AI_EXTRACTED_CONFIRMED,
-                    UUID.randomUUID(),
-                    null,
-                    null,
-                    actor,
-                    time,
-                    actor,
-                    time.plusSeconds(1),
                     null))
         .isInstanceOf(IllegalArgumentException.class);
     assertThat(
@@ -67,7 +54,7 @@ class DataProvenanceTest {
                     actor,
                     time,
                     actor,
-                    time,
+                    time.plusSeconds(1),
                     null)
                 .confirmedByUserId())
         .isEqualTo(actor);

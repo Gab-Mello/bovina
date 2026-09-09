@@ -33,8 +33,6 @@ public record DataProvenance(
     Objects.requireNonNull(recordedAt);
     if ((confirmedByUserId == null) != (confirmedAt == null))
       throw new IllegalArgumentException("Confirmation requires both actor and time");
-    if (confirmedAt != null && confirmedAt.isAfter(recordedAt))
-      throw new IllegalArgumentException("Confirmation cannot follow official recording");
     if (derivationReference != null
         && (derivationReference.isBlank() || derivationReference.length() > 256))
       throw new IllegalArgumentException("Invalid derivation reference");
