@@ -1,6 +1,8 @@
 package com.bovina.parties.domain;
 
+import com.bovina.platform.application.ApplicationFailure;
 import com.bovina.platform.application.StableIds;
+import com.bovina.platform.domain.Address;
 import com.bovina.platform.domain.DataProvenance;
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -29,6 +31,11 @@ public class Party {
   private Instant occurredAt;
 
   @Embedded private DataProvenance provenance;
+
+  @Column(length = 200)
+  private String legalName;
+
+  @Embedded private Address address;
   @Version private Long version;
 
   protected Party() {}
@@ -55,6 +62,55 @@ public class Party {
 
   public UUID id() {
     return id;
+  }
+
+  public void requireActive() {
+    if (!status.equals("ACTIVE"))
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT,
+          "COUNTERPARTY_ARCHIVED",
+          "An archived counterparty cannot receive new assignments");
+  }
+
+  public void requireVersion(long expected) {
+    if (version == null || version != expected)
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT,
+          "CONCURRENT_WRITE_CONFLICT",
+          "The record has changed; reload before editing");
+  }
+
+  public void updateDetails(long expected, String name, String legalName, Address address) {
+    requireVersion(expected);
+    requireActive();
+    if (name == null
+        || name.isBlank()
+        || name.length() > 200
+        || (legalName != null && legalName.length() > 200))
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.REJECTED,
+          "INVALID_COUNTERPARTY_NAME",
+          "Invalid counterparty name");
+    this.displayName = name.strip();
+    this.legalName = legalName;
+    this.address = address;
+  }
+
+  public void archive(long expected) {
+    requireVersion(expected);
+    status = "ARCHIVED";
+  }
+
+  public String status() {
+    return status;
+  }
+
+  public String legalName() {
+    return legalName;
+  }
+
+  public Address address() {
+    return address;
   }
 
   public UUID organizationId() {

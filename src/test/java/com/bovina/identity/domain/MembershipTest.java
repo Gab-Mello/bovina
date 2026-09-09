@@ -21,8 +21,10 @@ class MembershipTest {
 
   @Test
   void readOnlyCannotCreateClientsOrManageMemberships() {
-    assertThat(MembershipRole.READ_ONLY.permissions()).containsExactly("client:read");
+    assertThat(MembershipRole.READ_ONLY.permissions())
+        .containsExactlyInAnyOrder("client:read", "master-data:read");
     assertThat(MembershipRole.OPERATOR.permissions()).doesNotContain("membership:manage");
+    assertThat(MembershipRole.OPERATOR.permissions()).doesNotContain("protocol:manage");
   }
 
   @Test
