@@ -103,6 +103,170 @@ class MasterDataIT {
     assertThat(get(a, "/farm-properties?q=Farm").body()).contains("ARCHIVED");
   }
 
+  @Test
+  void locationsRemainDistinctTenantScopedAndHistoricallyReadable() throws Exception {
+    var a = tenant();
+    var b = tenant();
+    var establishment = establishment(a);
+    var second = establishment(a);
+    var id = IDS.next();
+    var input = Map.of("id", id, "name", "Main Lab", "type", "LAB");
+    var path = "/establishments/" + establishment + "/operational-locations";
+    assertThat(post(b, path, input).statusCode()).isEqualTo(404);
+    var result = post(a, path, input);
+    assertThat(result.statusCode()).as(result.body()).isEqualTo(201);
+    assertThat(
+            post(a, path, Map.of("id", IDS.next(), "name", "main lab", "type", "STORAGE"))
+                .statusCode())
+        .isEqualTo(409);
+    assertThat(get(a, "/establishments/" + second + "/operational-locations/" + id).statusCode())
+        .isEqualTo(404);
+    assertThat(get(b, path + "/" + id).statusCode()).isEqualTo(404);
+    assertThat(post(a, path + "/" + id + ":deactivate", Map.of("expectedVersion", 0)).statusCode())
+        .isEqualTo(200);
+    assertThat(get(a, path).body()).contains("INACTIVE");
+    assertThat(
+            post(
+                    a,
+                    "/establishments/" + establishment + ":deactivate",
+                    Map.of("expectedVersion", 0))
+                .statusCode())
+        .isEqualTo(200);
+    assertThat(
+            post(a, path, Map.of("id", IDS.next(), "name", "Other Lab", "type", "LAB"))
+                .statusCode())
+        .isEqualTo(409);
+  }
+
+  @Test
+  void technicianAssignmentsKeepCredentialSnapshotsAndAllowDistinctProfessionals()
+      throws Exception {
+    var a = tenant();
+    var b = tenant();
+    var establishment = establishment(a);
+    var professional = professional(a);
+    var doc = IDS.next();
+    var source = Map.of("id", doc, "type", "ART", "reference", "Declared source", "revision", "1");
+    assertThat(post(a, "/document-references", source).statusCode()).isEqualTo(201);
+    assertThat(get(b, "/document-references/" + doc).statusCode()).isEqualTo(404);
+    var credential = credential(a, professional, doc);
+    var id = IDS.next();
+    var path = "/establishments/" + establishment + "/responsible-technicians";
+    var input =
+        Map.of(
+            "id",
+            id,
+            "professionalId",
+            professional,
+            "credentialId",
+            credential,
+            "documentId",
+            doc,
+            "period",
+            Map.of("from", "2026-01-01"));
+    var result = post(a, path, input);
+    assertThat(result.statusCode()).as(result.body()).isEqualTo(201);
+    assertThat(result.body()).contains("CRMV declared", "123");
+    var duplicate = new HashMap<String, Object>(input);
+    duplicate.put("id", IDS.next());
+    assertThat(post(a, path, duplicate).statusCode()).isEqualTo(409);
+    var foreign = new HashMap<String, Object>(input);
+    foreign.put("id", IDS.next());
+    foreign.put("professionalId", professional(b));
+    assertThat(post(a, path, foreign).statusCode()).isEqualTo(404);
+    var second = professional(a);
+    var secondCredential = credential(a, second, doc);
+    var concurrent = new HashMap<String, Object>(input);
+    concurrent.put("id", IDS.next());
+    concurrent.put("professionalId", second);
+    concurrent.put("credentialId", secondCredential);
+    assertThat(post(a, path, concurrent).statusCode()).isEqualTo(201);
+    assertThat(
+            post(a, path + "/" + id + ":end", Map.of("expectedVersion", 0, "until", "2026-02-01"))
+                .statusCode())
+        .isEqualTo(200);
+    assertThat(
+            post(a, path + "/" + id + ":end", Map.of("expectedVersion", 1, "until", "2026-03-01"))
+                .statusCode())
+        .isEqualTo(409);
+    assertThat(
+            post(a, "/professionals/" + professional + ":deactivate", Map.of("expectedVersion", 0))
+                .statusCode())
+        .isEqualTo(200);
+    assertThat(get(a, path).body()).contains("CRMV declared", "2026-02-01");
+    try (var connection = TestDatabase.runtimeConnection();
+        var statement = connection.createStatement()) {
+      assertThatThrownBy(
+              () ->
+                  statement.executeUpdate("DELETE FROM document_reference WHERE id='" + doc + "'"))
+          .isInstanceOf(java.sql.SQLException.class)
+          .extracting("SQLState")
+          .isEqualTo("42501");
+      assertThatThrownBy(
+              () ->
+                  statement.executeUpdate(
+                      "UPDATE professional_credential SET number='changed' WHERE id='"
+                          + credential
+                          + "'"))
+          .isInstanceOf(java.sql.SQLException.class)
+          .extracting("SQLState")
+          .isEqualTo("42501");
+    }
+  }
+
+  private UUID establishment(UUID tenant) throws Exception {
+    var id = IDS.next();
+    var response =
+        post(
+            tenant,
+            "/establishments",
+            Map.of(
+                "id",
+                id,
+                "legalDisplayName",
+                "Lab establishment",
+                "operatingMode",
+                "COMMERCIAL",
+                "address",
+                address()));
+    assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
+    return id;
+  }
+
+  private UUID professional(UUID tenant) throws Exception {
+    var id = IDS.next();
+    var response =
+        post(
+            tenant,
+            "/professionals",
+            Map.of("id", id, "name", "Professional", "professionalType", "VETERINARIAN"));
+    assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
+    return id;
+  }
+
+  private UUID credential(UUID tenant, UUID professional, UUID document) throws Exception {
+    var id = IDS.next();
+    var response =
+        post(
+            tenant,
+            "/professionals/" + professional + "/credentials",
+            Map.of(
+                "id",
+                id,
+                "issuer",
+                "CRMV declared",
+                "jurisdiction",
+                "SP",
+                "number",
+                "123",
+                "period",
+                Map.of("from", "2026-01-01"),
+                "documentId",
+                document));
+    assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
+    return id;
+  }
+
   private UUID tenant() throws Exception {
     var id = IDS.next();
     var result =
