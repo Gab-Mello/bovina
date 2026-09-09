@@ -38,8 +38,12 @@ class FrameworkBaselineIT {
 
   @Test
   void startsWithFlywayAndValidateWithoutArtificialProductionMigrations() {
-    assertThat(flyway.info().applied()).isEmpty();
-    assertThat(entityManagerFactory.getMetamodel().getEntities()).isEmpty();
+    assertThat(flyway.info().applied()).isNotEmpty();
+    assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
+    assertThat(entityManagerFactory.getMetamodel().getEntities())
+        .extracting(jakarta.persistence.metamodel.EntityType::getName)
+        .contains("Organization", "UserAccount", "OrganizationMembership")
+        .doesNotContain("DatabaseRecord");
     assertThat(entityManagerFactory.getProperties())
         .containsEntry("hibernate.hbm2ddl.auto", "validate");
   }

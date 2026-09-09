@@ -63,9 +63,10 @@ wait_status "$base/actuator/health/readiness" 200
 wait_status "$base/actuator/health/liveness" 200
 [[ "$(docker exec "$api" id -u)" == 10001 ]] || fail "API is not running as UID 10001"
 [[ "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$api")" == true ]] || fail "Writable image filesystem"
-[[ "$(sql "SELECT tablename FROM pg_tables WHERE schemaname='public'")" == flyway_schema_history ]] || fail "Unexpected production tables"
+[[ "$(sql "SELECT to_regclass('public.organization')")" == organization ]] || fail "Organization schema missing"
 [[ "$(sql "SELECT tableowner FROM pg_tables WHERE tablename='flyway_schema_history'")" == bovina_migration ]] || fail "Wrong schema owner"
-[[ "$(sql "SELECT count(*) FROM flyway_schema_history")" == 0 ]] || fail "Artificial migration in production"
+migration_count="$(sql "SELECT count(*) FROM flyway_schema_history WHERE success")"
+(( migration_count > 0 )) || fail "Production migrations missing"
 [[ "$(http_status "$base/api/v1/clients")" == 401 ]] || fail "Anonymous API access"
 runtime_user="$(dc exec -T postgres sh -c 'PGPASSWORD="$BOVINA_RUNTIME_PASSWORD" psql -h 127.0.0.1 -U bovina_runtime -d bovina -Atc "SELECT current_user"')"
 [[ "$runtime_user" == bovina_runtime ]] || fail "Runtime password authentication failed"
@@ -81,7 +82,7 @@ echo "PASS: database outage affects readiness, not liveness"
 dc restart api
 base="http://$(dc port api 8080)"
 wait_status "$base/actuator/health/readiness" 200
-[[ "$(sql "SELECT count(*) FROM flyway_schema_history")" == 0 ]] || fail "Restart changed schema history"
+[[ "$(sql "SELECT count(*) FROM flyway_schema_history WHERE success")" == "$migration_count" ]] || fail "Restart changed schema history"
 
 sql "CREATE DATABASE bovina_restore" >/dev/null
 dc exec -T postgres pg_dump -U bovina_bootstrap -d bovina --format=custom |

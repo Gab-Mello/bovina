@@ -1,0 +1,19 @@
+package com.bovina.identity.domain;
+
+import java.util.Set;
+
+public enum MembershipRole {
+  ORG_ADMIN(Set.of("client:read", "client:create", "membership:manage")),
+  OPERATOR(Set.of("client:read", "client:create")),
+  READ_ONLY(Set.of("client:read"));
+
+  private final Set<String> permissions;
+
+  MembershipRole(Set<String> permissions) {
+    this.permissions = permissions;
+  }
+
+  public Set<String> permissions() {
+    return permissions;
+  }
+}

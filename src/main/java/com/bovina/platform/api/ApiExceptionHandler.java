@@ -33,6 +33,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
           case NOT_FOUND -> HttpStatus.NOT_FOUND;
           case CONFLICT -> HttpStatus.CONFLICT;
           case REJECTED -> HttpStatus.UNPROCESSABLE_CONTENT;
+          case FORBIDDEN -> HttpStatus.FORBIDDEN;
         };
     return ResponseEntity.status(status)
         .body(problems.create(status, failure.code(), failure.getMessage(), request));

@@ -8,7 +8,8 @@ public final class ApplicationFailure extends RuntimeException {
   public enum Kind {
     NOT_FOUND,
     CONFLICT,
-    REJECTED
+    REJECTED,
+    FORBIDDEN
   }
 
   private final String code;
