@@ -37,7 +37,7 @@ class SecurityAndOpenApiIT {
   }
 
   @Test
-  void acceptsSignedTokenAndProducesOpenApiWithoutBusinessEndpoints() throws Exception {
+  void acceptsSignedTokenAndDocumentsClientWithoutExposingInternalParty() throws Exception {
     var response =
         get(
             "/v3/api-docs",
@@ -46,7 +46,9 @@ class SecurityAndOpenApiIT {
     assertThat(response.statusCode()).isEqualTo(200);
     assertThat(JsonMapper.builder().build().readTree(response.body()).path("openapi").asString())
         .startsWith("3.");
-    assertThat(response.body()).doesNotContain("/api/v1/clients", "/fivs", "/bulls");
+    assertThat(response.body())
+        .contains("/api/v1/clients", "bearerAuth")
+        .doesNotContain("/parties", "/fivs", "/bulls");
     assertThat(
             get(
                     "/swagger-ui/index.html",
