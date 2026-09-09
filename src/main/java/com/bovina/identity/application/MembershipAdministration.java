@@ -37,6 +37,12 @@ public class MembershipAdministration {
   public UUID grant(ExecutionContext context, GrantMembership command) {
     access.require(context, "membership:manage");
     var now = clock.instant();
+    if (command.validUntil() != null && !command.validUntil().isAfter(now)) {
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.REJECTED,
+          "INVALID_MEMBERSHIP_INTERVAL",
+          "Membership expiry must follow its start");
+    }
     var user = identities.registerUser(ids.next(), command.identity(), now);
     var membership =
         new OrganizationMembership(

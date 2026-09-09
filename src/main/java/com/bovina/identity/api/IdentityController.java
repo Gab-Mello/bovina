@@ -109,7 +109,7 @@ public class IdentityController {
       Instant validUntil) {}
 
   public record RevokeRequest(
-      @Min(0) long expectedVersion, @NotBlank @Size(max = 500) String reason) {}
+      @NotNull @Min(0) Long expectedVersion, @NotBlank @Size(max = 500) String reason) {}
 
   public record CreatedOrganization(UUID id) {}
 

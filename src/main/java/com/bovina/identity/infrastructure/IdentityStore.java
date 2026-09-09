@@ -5,6 +5,7 @@ import com.bovina.identity.application.MembershipView;
 import com.bovina.identity.domain.MembershipRole;
 import com.bovina.identity.domain.Organization;
 import com.bovina.identity.domain.OrganizationMembership;
+import com.bovina.platform.application.ApplicationFailure;
 import jakarta.persistence.EntityManager;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -34,11 +35,20 @@ public class IdentityStore {
         identity.issuer(),
         identity.subject(),
         Timestamp.from(now));
-    return jdbc.queryForObject(
-        "SELECT id FROM user_account WHERE issuer=? AND subject=? AND status='ACTIVE'",
-        UUID.class,
-        identity.issuer(),
-        identity.subject());
+    return jdbc
+        .query(
+            "SELECT id FROM user_account WHERE issuer=? AND subject=? AND status='ACTIVE'",
+            (rs, row) -> rs.getObject(1, UUID.class),
+            identity.issuer(),
+            identity.subject())
+        .stream()
+        .findFirst()
+        .orElseThrow(
+            () ->
+                new ApplicationFailure(
+                    ApplicationFailure.Kind.FORBIDDEN,
+                    "ACCOUNT_DISABLED",
+                    "Account is not available for membership"));
   }
 
   public void createOrganization(Organization organization, OrganizationMembership membership) {
