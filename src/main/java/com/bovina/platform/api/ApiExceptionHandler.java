@@ -5,6 +5,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -81,4 +84,29 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
   }
 
   public record FieldViolation(String field, String code, String message) {}
+
+  @ExceptionHandler(DataIntegrityViolationException.class)
+  ResponseEntity<Object> constraintConflict(HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(
+            problems.create(
+                HttpStatus.CONFLICT,
+                "CONSTRAINT_CONFLICT",
+                "The command conflicts with an existing record or reference",
+                request));
+  }
+
+  @ExceptionHandler({
+    OptimisticLockingFailureException.class,
+    PessimisticLockingFailureException.class
+  })
+  ResponseEntity<Object> concurrentWrite(HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(
+            problems.create(
+                HttpStatus.CONFLICT,
+                "CONCURRENT_WRITE_CONFLICT",
+                "Retry the command with the same idempotency key",
+                request));
+  }
 }
