@@ -115,7 +115,8 @@ public class CounterpartyRegistration {
             parties.flush();
           }
           if (!queries.hasRole(context.tenantId(), party.id(), role)) {
-            queries.attachRole(context.tenantId(), party.id(), role);
+            party.assignRole(role);
+            parties.flush();
             audit.record(
                 new AuditEvent(
                     ids.next(),

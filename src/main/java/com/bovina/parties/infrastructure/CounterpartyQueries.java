@@ -17,14 +17,6 @@ public class CounterpartyQueries {
     this.jdbc = jdbc;
   }
 
-  public void attachRole(UUID tenant, UUID id, CounterpartyRole role) {
-    jdbc.update(
-        "INSERT INTO party_role(organization_id,party_id,role) VALUES (?,?,?) ON CONFLICT DO NOTHING",
-        tenant,
-        id,
-        role.name());
-  }
-
   public boolean hasRole(UUID tenant, UUID id, CounterpartyRole role) {
     return Boolean.TRUE.equals(
         jdbc.queryForObject(

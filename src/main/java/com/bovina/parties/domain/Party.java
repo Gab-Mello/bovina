@@ -6,7 +6,9 @@ import com.bovina.platform.domain.Address;
 import com.bovina.platform.domain.DataProvenance;
 import jakarta.persistence.*;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -36,6 +38,18 @@ public class Party {
   private String legalName;
 
   @Embedded private Address address;
+
+  @ElementCollection(fetch = FetchType.LAZY)
+  @CollectionTable(
+      name = "party_role",
+      joinColumns = {
+        @JoinColumn(name = "party_id", referencedColumnName = "id"),
+        @JoinColumn(name = "organization_id", referencedColumnName = "organization_id")
+      })
+  @Enumerated(EnumType.STRING)
+  @Column(name = "role", nullable = false, length = 32)
+  private Set<CounterpartyRole> roles = new HashSet<>();
+
   @Version private Long version;
 
   protected Party() {}
@@ -70,6 +84,11 @@ public class Party {
           ApplicationFailure.Kind.CONFLICT,
           "COUNTERPARTY_ARCHIVED",
           "An archived counterparty cannot receive new assignments");
+  }
+
+  public void assignRole(CounterpartyRole role) {
+    requireActive();
+    roles.add(Objects.requireNonNull(role));
   }
 
   public void requireVersion(long expected) {
@@ -127,6 +146,10 @@ public class Party {
 
   public DataProvenance provenance() {
     return provenance;
+  }
+
+  public Instant occurredAt() {
+    return occurredAt;
   }
 
   public Long version() {

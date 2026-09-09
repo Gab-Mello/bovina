@@ -63,8 +63,11 @@ class MasterDataIT {
       var key = IDS.next();
       var registered = post(tenant, path, key, reuse);
       assertThat(registered.statusCode()).as(registered.body()).isEqualTo(201);
+      assertThat(json.readTree(registered.body()).path("version").asLong())
+          .isEqualTo(((Number) reuse.get("expectedVersion")).longValue() + 1);
       assertThat(json.readTree(post(tenant, path, key, reuse).body()))
           .isEqualTo(json.readTree(registered.body()));
+      reuse.put("expectedVersion", json.readTree(registered.body()).path("version").asLong());
     }
     assertThat(jdbc.queryForObject("SELECT count(*) FROM party WHERE id=?", Integer.class, id))
         .isEqualTo(1);
@@ -77,7 +80,11 @@ class MasterDataIT {
     assertThat(get(other, "/suppliers/" + id).statusCode()).isEqualTo(404);
     assertThat(get(tenant, "/clients?q=Shared&size=1").body()).contains("Shared identity");
     assertThat(get(tenant, "/parties/" + id).statusCode()).isEqualTo(404);
-    var archived = post(tenant, "/clients/" + id + ":archive", Map.of("expectedVersion", 0));
+    var archived =
+        post(
+            tenant,
+            "/clients/" + id + ":archive",
+            Map.of("expectedVersion", reuse.get("expectedVersion")));
     assertThat(archived.statusCode()).as(archived.body()).isEqualTo(200);
     assertThat(post(tenant, "/owners?scope=MATERIAL", reuse).statusCode()).isEqualTo(409);
     assertThat(get(tenant, "/clients/" + id).statusCode()).isEqualTo(200);
