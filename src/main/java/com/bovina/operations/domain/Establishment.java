@@ -4,7 +4,10 @@ import com.bovina.platform.application.*;
 import com.bovina.platform.domain.Address;
 import jakarta.persistence.*;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -12,7 +15,7 @@ import java.util.UUID;
 public class Establishment {
   @Id private UUID id;
 
-  @Column(nullable = false)
+  @Column(name = "organization_id", nullable = false)
   private UUID organizationId;
 
   @Column(nullable = false, length = 200)
@@ -38,6 +41,20 @@ public class Establishment {
 
   private UUID registrationDocumentId;
 
+  private LocalDate registrationValidFrom;
+  private LocalDate registrationValidUntil;
+
+  @ElementCollection(fetch = FetchType.LAZY)
+  @CollectionTable(
+      name = "establishment_capability",
+      joinColumns = {
+        @JoinColumn(name = "establishment_id", referencedColumnName = "id"),
+        @JoinColumn(name = "organization_id", referencedColumnName = "organization_id")
+      })
+  @Enumerated(EnumType.STRING)
+  @Column(name = "capability", nullable = false, length = 32)
+  private Set<Capability> capabilities = new HashSet<>();
+
   @Column(nullable = false, length = 16)
   private String status;
 
@@ -62,6 +79,9 @@ public class Establishment {
     registrationNumber = input.registrationNumber();
     registrationReference = input.registrationReference();
     registrationDocumentId = input.registrationDocumentId();
+    registrationValidFrom = input.registrationValidFrom();
+    registrationValidUntil = input.registrationValidUntil();
+    capabilities.addAll(input.capabilities());
     status = "ACTIVE";
     recordedBy = Objects.requireNonNull(actor);
     recordedAt = Objects.requireNonNull(now);
@@ -103,12 +123,22 @@ public class Establishment {
         registrationIssuer,
         registrationNumber,
         registrationReference,
-        registrationDocumentId);
+        registrationDocumentId,
+        registrationValidFrom,
+        registrationValidUntil,
+        capabilities);
   }
 
   public enum OperatingMode {
     COMMERCIAL,
     OWN_HERD_ONLY
+  }
+
+  public enum Capability {
+    OOCYTE_COLLECTION,
+    EMBRYO_PRODUCTION,
+    CRYOSTORAGE,
+    TRANSFER
   }
 
   public record Details(
@@ -119,9 +149,23 @@ public class Establishment {
       String registrationIssuer,
       String registrationNumber,
       String registrationReference,
-      UUID registrationDocumentId) {
+      UUID registrationDocumentId,
+      LocalDate registrationValidFrom,
+      LocalDate registrationValidUntil,
+      Set<Capability> capabilities) {
     public Details {
       StableIds.requireVersion7(id);
+      capabilities =
+          capabilities == null || capabilities.isEmpty()
+              ? Set.of()
+              : java.util.Collections.unmodifiableSet(java.util.EnumSet.copyOf(capabilities));
+      if (registrationValidUntil != null
+          && (registrationValidFrom == null
+              || !registrationValidUntil.isAfter(registrationValidFrom)))
+        throw new ApplicationFailure(
+            ApplicationFailure.Kind.REJECTED,
+            "INVALID_REGISTRATION_PERIOD",
+            "Registration end must be later than its start");
       if (legalDisplayName == null
           || legalDisplayName.isBlank()
           || legalDisplayName.length() > 200

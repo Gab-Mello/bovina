@@ -14,6 +14,10 @@ public interface EstablishmentRepository extends Repository<Establishment, UUID>
 
   Optional<Establishment> findByOrganizationIdAndId(UUID tenant, UUID id);
 
+  @EntityGraph(attributePaths = "capabilities")
+  @Query("select e from Establishment e where e.organizationId=:tenant and e.id in :ids")
+  List<Establishment> withCapabilities(UUID tenant, Collection<UUID> ids);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select e from Establishment e where e.organizationId=:tenant and e.id=:id")
   Optional<Establishment> lock(UUID tenant, UUID id);

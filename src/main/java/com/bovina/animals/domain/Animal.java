@@ -12,7 +12,7 @@ import java.util.UUID;
 public class Animal {
   @Id private UUID id;
 
-  @Column(nullable = false)
+  @Column(name = "organization_id", nullable = false)
   private UUID organizationId;
 
   @Column(nullable = false, length = 16)

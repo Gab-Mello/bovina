@@ -72,14 +72,15 @@ public class Establishments {
   @Transactional(readOnly = true)
   public PageResult<View> search(ExecutionContext context, SearchPage page) {
     access.require(context, "master-data:read");
+    var selected =
+        establishments.search(
+            context.tenantId(), page.pattern(), PageRequest.of(page.page(), page.size()));
+    // Fetch only this page's bounded capabilities, without paginating a collection join.
+    if (!selected.isEmpty())
+      establishments.withCapabilities(
+          context.tenantId(), selected.stream().map(Establishment::id).toList());
     return new PageResult<>(
-        establishments
-            .search(context.tenantId(), page.pattern(), PageRequest.of(page.page(), page.size()))
-            .stream()
-            .map(Establishments::view)
-            .toList(),
-        page.page(),
-        page.size());
+        selected.stream().map(Establishments::view).toList(), page.page(), page.size());
   }
 
   @Transactional
