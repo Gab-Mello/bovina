@@ -2,6 +2,7 @@ package com.bovina.protocols.infrastructure;
 
 import com.bovina.platform.application.*;
 import com.bovina.platform.domain.EffectivePeriod;
+import com.bovina.protocols.application.ProtocolWithdrawal;
 import com.bovina.protocols.domain.*;
 import java.sql.Timestamp;
 import java.time.*;
@@ -38,6 +39,32 @@ public class ProtocolStore {
 
   public ProtocolStore(JdbcTemplate jdbc) {
     this.jdbc = jdbc;
+  }
+
+  public void withdraw(UUID tenant, ProtocolWithdrawal withdrawal) {
+    jdbc.update(
+        "INSERT INTO protocol_version_withdrawal(organization_id,version_id,reason,withdrawn_by,withdrawn_at) VALUES (?,?,?,?,?)",
+        tenant,
+        withdrawal.versionId(),
+        withdrawal.reason(),
+        withdrawal.withdrawnBy(),
+        Timestamp.from(withdrawal.withdrawnAt()));
+  }
+
+  public Optional<ProtocolWithdrawal> withdrawal(UUID tenant, UUID version) {
+    return jdbc
+        .query(
+            "SELECT * FROM protocol_version_withdrawal WHERE organization_id=? AND version_id=?",
+            (rs, n) ->
+                new ProtocolWithdrawal(
+                    rs.getObject("version_id", UUID.class),
+                    rs.getString("reason"),
+                    rs.getObject("withdrawn_by", UUID.class),
+                    rs.getTimestamp("withdrawn_at").toInstant()),
+            tenant,
+            version)
+        .stream()
+        .findFirst();
   }
 
   public void insertDefinition(UUID tenant, ProtocolDefinition d, UUID actor, Instant now) {

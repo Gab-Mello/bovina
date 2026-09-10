@@ -3,6 +3,7 @@ package com.bovina.protocols.api;
 import com.bovina.identity.application.AuthenticatedIdentity;
 import com.bovina.identity.application.TenantAccess;
 import com.bovina.platform.application.*;
+import com.bovina.protocols.application.ProtocolWithdrawal;
 import com.bovina.protocols.application.Protocols;
 import com.bovina.protocols.domain.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -107,6 +108,31 @@ public class ProtocolController {
   }
 
   public record VersionRequest(@NotNull @PositiveOrZero Long expectedVersion) {}
+
+  @PostMapping("/{definition}/versions/{id}:deactivate")
+  public ProtocolWithdrawal withdraw(
+      @AuthenticationPrincipal Jwt jwt,
+      @RequestHeader(value = "X-Organization-ID", required = false) UUID organization,
+      HttpServletRequest request,
+      @PathVariable UUID definition,
+      @PathVariable UUID id,
+      @RequestHeader("Idempotency-Key") UUID key,
+      @Valid @RequestBody WithdrawalRequest body) {
+    return protocols.withdraw(
+        context(jwt, organization, request), key, definition, id, body.reason());
+  }
+
+  @GetMapping("/{definition}/versions/{id}/withdrawal")
+  public ProtocolWithdrawal withdrawal(
+      @AuthenticationPrincipal Jwt jwt,
+      @RequestHeader(value = "X-Organization-ID", required = false) UUID organization,
+      HttpServletRequest request,
+      @PathVariable UUID definition,
+      @PathVariable UUID id) {
+    return protocols.withdrawal(context(jwt, organization, request), definition, id);
+  }
+
+  public record WithdrawalRequest(@NotBlank @Size(max = 500) String reason) {}
 
   private ExecutionContext context(Jwt jwt, UUID organization, HttpServletRequest request) {
     return access.resolve(

@@ -138,13 +138,18 @@ public class Protocols {
         protocols.versions(c.tenantId(), definition, page), page.page(), page.size());
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public AppliedVersion requireApplicable(
       ExecutionContext c, UUID versionId, String purpose, LocalDate on) {
     access.require(c, "master-data:read");
     var v =
         protocols.version(c.tenantId(), versionId).orElseThrow(() -> missing("PROTOCOL_VERSION"));
-    var d = find(c, v.definitionId());
+    var d = protocols.lock(c.tenantId(), v.definitionId()).orElseThrow(() -> missing("PROTOCOL"));
+    if (protocols.withdrawal(c.tenantId(), versionId).isPresent())
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT,
+          "PROTOCOL_VERSION_WITHDRAWN",
+          "Protocol version is withdrawn from new use");
     d.requireActive();
     v.requireApplicable(d.purpose(), purpose, on);
     return new AppliedVersion(v.id(), v.definitionId(), d.purpose(), v.revision(), v.checksum());
@@ -153,6 +158,38 @@ public class Protocols {
   private ProtocolDefinition find(ExecutionContext c, UUID id) {
     return protocols.find(c.tenantId(), id).orElseThrow(() -> missing("PROTOCOL"));
   }
+
+  @Transactional
+  public ProtocolWithdrawal withdraw(
+      ExecutionContext c, UUID key, UUID definition, UUID id, String reason) {
+    access.require(c, "protocol:manage");
+    return receipts.replayOrExecute(
+        c,
+        key,
+        "WITHDRAW_PROTOCOL_VERSION_V1",
+        new WithdrawalIntent(definition, id, reason),
+        ProtocolWithdrawal.class,
+        () -> {
+          protocols.lock(c.tenantId(), definition).orElseThrow(() -> missing("PROTOCOL"));
+          var v =
+              protocols.version(c.tenantId(), id).orElseThrow(() -> missing("PROTOCOL_VERSION"));
+          if (!v.definitionId().equals(definition)) throw missing("PROTOCOL_VERSION");
+          var withdrawal =
+              new ProtocolWithdrawal(
+                  id, reason, c.actorId(), clock.instant().truncatedTo(ChronoUnit.MICROS));
+          protocols.withdraw(c.tenantId(), withdrawal);
+          record(c, "DEACTIVATE", "PROTOCOL_VERSION", id, null, "WITHDRAWN");
+          return withdrawal;
+        });
+  }
+
+  @Transactional(readOnly = true)
+  public ProtocolWithdrawal withdrawal(ExecutionContext c, UUID definition, UUID id) {
+    version(c, definition, id);
+    return protocols.withdrawal(c.tenantId(), id).orElseThrow(() -> missing("PROTOCOL_WITHDRAWAL"));
+  }
+
+  private record WithdrawalIntent(UUID definition, UUID id, String reason) {}
 
   private static ApplicationFailure missing(String type) {
     return new ApplicationFailure(
