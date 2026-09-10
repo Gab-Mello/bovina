@@ -58,9 +58,10 @@ public class AnimalController {
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size,
       @RequestParam(required = false) UUID ownerId,
-      @RequestParam(required = false) LocalDate ownedOn) {
+      @RequestParam(required = false) LocalDate ownedOn,
+      @RequestParam(required = false) Animal.Role role) {
     return animals.search(
-        context(jwt, organization, request), new SearchPage(q, page, size), ownerId, ownedOn);
+        context(jwt, organization, request), new SearchPage(q, page, size), ownerId, ownedOn, role);
   }
 
   @PostMapping("/{id}:archive")

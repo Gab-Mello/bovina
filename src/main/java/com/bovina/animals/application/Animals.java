@@ -83,13 +83,21 @@ public class Animals {
 
   @Transactional(readOnly = true)
   public PageResult<View> search(
-      ExecutionContext context, SearchPage page, UUID owner, LocalDate ownedOn) {
+      ExecutionContext context,
+      SearchPage page,
+      UUID owner,
+      LocalDate ownedOn,
+      Animal.Role observedRole) {
     access.require(context, "master-data:read");
+    // Registration is not evidence of a performed procedure. This milestone has no role-producing
+    // facts.
+    if (observedRole != null)
+      return new PageResult<>(java.util.List.of(), page.page(), page.size());
     return new PageResult<>(
         animals
             .search(
                 context.tenantId(),
-                page.pattern(),
+                java.text.Normalizer.normalize(page.pattern(), java.text.Normalizer.Form.NFC),
                 owner,
                 ownedOn,
                 PageRequest.of(page.page(), page.size()))
