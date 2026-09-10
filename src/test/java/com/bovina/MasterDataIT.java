@@ -14,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.*;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -25,6 +26,8 @@ class MasterDataIT {
   @Autowired JdbcTemplate jdbc;
   @Autowired com.bovina.protocols.application.Protocols protocols;
   @Autowired com.bovina.identity.application.TenantAccess access;
+  @Autowired com.bovina.parties.application.ClientImportTransactions importTransactions;
+  @Autowired com.bovina.parties.application.ClientImports imports;
 
   @DynamicPropertySource
   static void configuration(DynamicPropertyRegistry registry) {
@@ -539,6 +542,431 @@ class MasterDataIT {
       }
     }
     fail("Concurrent commands did not reach the PostgreSQL lock");
+  }
+
+  @Test
+  void clientImportDryRunAndAtomicValidationNeverPartiallyCreateClients() throws Exception {
+    var tenant = tenant();
+    var batch = IDS.next();
+    var client = IDS.next();
+    var input =
+        importBatch(
+            batch, "ATOMIC", List.of(importRow(client, "Valid"), importRow(IDS.next(), " ")));
+    var preview = post(tenant, "/clients/imports:dry-run", input);
+    assertThat(preview.statusCode()).as(preview.body()).isEqualTo(200);
+    assertThat(preview.body()).contains("VALID", "REJECTED", "INVALID_CLIENT_DETAILS");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM import_batch WHERE id=?", Integer.class, batch))
+        .isZero();
+    var committed = post(tenant, "/clients/imports", batch, input);
+    assertThat(committed.statusCode()).as(committed.body()).isEqualTo(200);
+    assertThat(committed.body())
+        .contains("NOT_APPLIED", "REJECTED")
+        .doesNotContain("\"status\":\"APPLIED\"");
+    assertThat(get(tenant, "/clients/" + client).statusCode()).isEqualTo(404);
+    assertThat(json.readTree(post(tenant, "/clients/imports", batch, input).body()))
+        .isEqualTo(json.readTree(committed.body()));
+  }
+
+  @Test
+  void partialImportPreservesProvenanceAndReplaysResultsWithoutDuplicatingEffects()
+      throws Exception {
+    var tenant = tenant();
+    var batch = IDS.next();
+    var client = IDS.next();
+    var input =
+        importBatch(
+            batch,
+            "PARTIAL",
+            List.of(importRow(client, "Imported client"), importRow(IDS.next(), " ")));
+    var result = post(tenant, "/clients/imports", batch, input);
+    assertThat(result.statusCode()).as(result.body()).isEqualTo(200);
+    assertThat(result.body()).contains("APPLIED", "REJECTED");
+    assertThat(get(tenant, "/clients/" + client).body()).contains("IMPORT", "Imported client");
+    assertThat(
+            jdbc.queryForObject("SELECT import_batch_id FROM party WHERE id=?", UUID.class, client))
+        .isEqualTo(batch);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM audit_event WHERE entity_id=? AND action='IMPORT'",
+                Integer.class,
+                client))
+        .isEqualTo(1);
+    assertThat(json.readTree(post(tenant, "/clients/imports", batch, input).body()))
+        .isEqualTo(json.readTree(result.body()));
+    var changed = importBatch(batch, "PARTIAL", List.of(importRow(IDS.next(), "Changed")));
+    assertThat(post(tenant, "/clients/imports", batch, changed).statusCode()).isEqualTo(409);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM party WHERE import_batch_id=?", Integer.class, batch))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void importConstraintFailuresRollbackBeforeRecordingPerItemResults() throws Exception {
+    var a = tenant();
+    var b = tenant();
+    var foreign = owner(b);
+    var valid = IDS.next();
+    var atomic = IDS.next();
+    var atomicInput =
+        importBatch(
+            atomic,
+            "ATOMIC",
+            List.of(
+                importRow(valid, "Must roll back"), importRow(foreign, "Conflicting identity")));
+    var failed = post(a, "/clients/imports", atomic, atomicInput);
+    assertThat(failed.statusCode()).as(failed.body()).isEqualTo(200);
+    assertThat(failed.body()).contains("ATOMIC_CONSTRAINT_CONFLICT");
+    assertThat(get(a, "/clients/" + valid).statusCode()).isEqualTo(404);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM audit_event WHERE entity_id=?", Integer.class, valid))
+        .isZero();
+    var partial = IDS.next();
+    var partialInput =
+        importBatch(
+            partial,
+            "PARTIAL",
+            List.of(
+                importRow(foreign, "Conflicting identity"),
+                importRow(valid, "Valid after rollback")));
+    var result = post(a, "/clients/imports", partial, partialInput);
+    assertThat(result.statusCode()).as(result.body()).isEqualTo(200);
+    assertThat(result.body()).contains("CONSTRAINT_CONFLICT", "APPLIED");
+    assertThat(get(a, "/clients/" + valid).statusCode()).isEqualTo(200);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM import_item_result WHERE batch_id=?", Integer.class, partial))
+        .isEqualTo(2);
+  }
+
+  @Test
+  void concurrentAtomicImportReplaysTheSameImmutableItemResults() throws Exception {
+    var tenant = tenant();
+    var batch = IDS.next();
+    var client = IDS.next();
+    var input = importBatch(batch, "ATOMIC", List.of(importRow(client, "Concurrent import")));
+    var barrier = new java.util.concurrent.CyclicBarrier(3);
+    try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+      var futures = new ArrayList<java.util.concurrent.Future<HttpResponse<String>>>();
+      for (int i = 0; i < 3; i++)
+        futures.add(
+            executor.submit(
+                () -> {
+                  barrier.await(5, java.util.concurrent.TimeUnit.SECONDS);
+                  return post(tenant, "/clients/imports", batch, input);
+                }));
+      var responses = new ArrayList<JsonNode>();
+      for (var future : futures) {
+        var result = future.get(15, java.util.concurrent.TimeUnit.SECONDS);
+        assertThat(result.statusCode()).as(result.body()).isEqualTo(200);
+        responses.add(json.readTree(result.body()));
+      }
+      assertThat(responses).allSatisfy(r -> assertThat(r).isEqualTo(responses.getFirst()));
+      assertThat(
+              jdbc.queryForObject(
+                  "SELECT count(*) FROM party WHERE import_batch_id=?", Integer.class, batch))
+          .isEqualTo(1);
+      assertThat(
+              jdbc.queryForObject(
+                  "SELECT count(*) FROM audit_event WHERE entity_id=? AND action='IMPORT'",
+                  Integer.class,
+                  client))
+          .isEqualTo(1);
+    }
+  }
+
+  @Test
+  void productIdentifiersAreScopedAndSearchableWithoutTaxIdDeduplication() throws Exception {
+    var a = tenant();
+    var b = tenant();
+    var first = owner(a);
+    var second = owner(a);
+    var input = Map.of("id", IDS.next(), "type", "DECLARED_TAX_ID", "value", " 001-A ");
+    assertThat(post(a, "/owners/" + first + "/identifiers", input).statusCode()).isEqualTo(201);
+    var duplicate = Map.of("id", IDS.next(), "type", "DECLARED_TAX_ID", "value", "001-A");
+    assertThat(post(a, "/owners/" + first + "/identifiers", duplicate).statusCode()).isEqualTo(409);
+    assertThat(post(a, "/owners/" + second + "/identifiers", duplicate).statusCode())
+        .isEqualTo(201);
+    assertThat(get(a, "/owners?scope=ANIMAL&q=001-A").body())
+        .contains(first.toString(), second.toString());
+    assertThat(get(b, "/owners/" + first + "/identifiers").statusCode()).isEqualTo(404);
+    assertThat(get(a, "/owners/" + first + "/identifiers").body())
+        .doesNotContain("partyId", "organizationId");
+  }
+
+  @Test
+  void establishmentCapabilitiesAreExplicitAndDoNotCreateDefaultLocations() throws Exception {
+    var tenant = tenant();
+    var id = IDS.next();
+    var input =
+        Map.of(
+            "id",
+            id,
+            "legalDisplayName",
+            "Lab",
+            "operatingMode",
+            "COMMERCIAL",
+            "address",
+            address(),
+            "capabilities",
+            List.of("EMBRYO_PRODUCTION", "TRANSFER"),
+            "registrationValidFrom",
+            "2026-01-01",
+            "registrationValidUntil",
+            "2027-01-01");
+    var key = IDS.next();
+    var result = post(tenant, "/establishments", key, input);
+    assertThat(result.statusCode()).as(result.body()).isEqualTo(201);
+    var reordered = new HashMap<String, Object>(input);
+    reordered.put("capabilities", List.of("TRANSFER", "EMBRYO_PRODUCTION"));
+    assertThat(json.readTree(post(tenant, "/establishments", key, reordered).body()))
+        .isEqualTo(json.readTree(result.body()));
+    assertThat(get(tenant, "/establishments?size=1").body())
+        .contains("EMBRYO_PRODUCTION", "TRANSFER");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM operational_location WHERE establishment_id=?",
+                Integer.class,
+                id))
+        .isZero();
+    animal(tenant);
+    var observed = get(tenant, "/animals?role=DONOR");
+    assertThat(observed.statusCode()).isEqualTo(200);
+    assertThat(json.readTree(observed.body()).path("items").size()).isZero();
+  }
+
+  @Test
+  void withdrawingOneProtocolRevisionPreservesItsBytesAndOtherVersions() throws Exception {
+    var tenant = tenant();
+    var definition = IDS.next();
+    var first = IDS.next();
+    var second = IDS.next();
+    assertThat(
+            post(
+                    tenant,
+                    "/protocol-definitions",
+                    Map.of("id", definition, "purpose", "OOCYTE_TRANSPORT", "name", "Transport"))
+                .statusCode())
+        .isEqualTo(201);
+    var path = "/protocol-definitions/" + definition + "/versions";
+    var publication =
+        Map.of(
+            "id",
+            first,
+            "revision",
+            "1",
+            "effectivePeriod",
+            Map.of("from", "2026-01-01"),
+            "contentReference",
+            "reference/1",
+            "checksum",
+            "a".repeat(64));
+    var original = post(tenant, path, publication);
+    assertThat(original.statusCode()).isEqualTo(201);
+    var next = new HashMap<String, Object>(publication);
+    next.put("id", second);
+    next.put("revision", "2");
+    assertThat(post(tenant, path, next).statusCode()).isEqualTo(201);
+    var key = IDS.next();
+    var reason = Map.of("reason", "Superseded operational instruction");
+    var withdrawal = post(tenant, path + "/" + first + ":deactivate", key, reason);
+    assertThat(withdrawal.statusCode()).as(withdrawal.body()).isEqualTo(200);
+    assertThat(json.readTree(post(tenant, path + "/" + first + ":deactivate", key, reason).body()))
+        .isEqualTo(json.readTree(withdrawal.body()));
+    assertThat(json.readTree(get(tenant, path + "/" + first).body()))
+        .isEqualTo(json.readTree(original.body()));
+    var context = context(tenant);
+    assertThatThrownBy(
+            () ->
+                protocols.requireApplicable(
+                    context, first, "OOCYTE_TRANSPORT", LocalDate.of(2026, 2, 1)))
+        .isInstanceOf(com.bovina.platform.application.ApplicationFailure.class)
+        .extracting("code")
+        .isEqualTo("PROTOCOL_VERSION_WITHDRAWN");
+    assertThat(
+            protocols
+                .requireApplicable(context, second, "OOCYTE_TRANSPORT", LocalDate.of(2026, 2, 1))
+                .id())
+        .isEqualTo(second);
+  }
+
+  @Test
+  void partialImportResumesCommittedItemsAfterAnInterruptedBatch() throws Exception {
+    var tenant = tenant();
+    var first = IDS.next();
+    var second = IDS.next();
+    var id = IDS.next();
+    var input =
+        importBatch(id, "PARTIAL", List.of(importRow(first, "First"), importRow(second, "Second")));
+    var batch =
+        json.readValue(
+            json.writeValueAsString(input), com.bovina.parties.domain.ClientImportBatch.class);
+    var context = context(tenant);
+    importTransactions.bind(context, batch);
+    importTransactions.partialItem(context, batch, batch.items().getFirst());
+    var result = imports.commit(context, id, batch);
+    assertThat(result.items())
+        .allSatisfy(
+            item ->
+                assertThat(item.status())
+                    .isEqualTo(com.bovina.parties.domain.ClientImportBatch.ItemStatus.APPLIED));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM party WHERE import_batch_id=?", Integer.class, id))
+        .isEqualTo(2);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM audit_event WHERE entity_id=? AND action='IMPORT'",
+                Integer.class,
+                first))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void masterDataRbacIsEnforcedBeyondTheController() throws Exception {
+    var tenant = tenant();
+    var reader = "reader-" + IDS.next();
+    var grant =
+        post(
+            tenant,
+            "/memberships",
+            Map.of("id", IDS.next(), "subject", reader, "role", "READ_ONLY"));
+    assertThat(grant.statusCode()).as(grant.body()).isEqualTo(201);
+    var context =
+        access.resolve(
+            new com.bovina.identity.application.AuthenticatedIdentity(
+                TOKENS.issuer().toString(), reader),
+            tenant,
+            IDS.next());
+    assertThatThrownBy(
+            () ->
+                protocols.register(
+                    context,
+                    IDS.next(),
+                    new com.bovina.protocols.application.Protocols.Register(
+                        IDS.next(), "OOCYTE_TRANSPORT", "Denied", null)))
+        .isInstanceOf(com.bovina.platform.application.ApplicationFailure.class)
+        .extracting("code")
+        .isEqualTo("ACCESS_DENIED");
+    var batch =
+        json.readValue(
+            json.writeValueAsString(
+                importBatch(IDS.next(), "ATOMIC", List.of(importRow(IDS.next(), "Denied")))),
+            com.bovina.parties.domain.ClientImportBatch.class);
+    assertThatThrownBy(() -> imports.commit(context, batch.batchId(), batch))
+        .isInstanceOf(com.bovina.platform.application.ApplicationFailure.class);
+    var request =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/animals"))
+            .header(
+                "Authorization",
+                "Bearer "
+                    + TOKENS.token(
+                        reader,
+                        TOKENS.issuer().toString(),
+                        "bovina-test",
+                        Instant.now().plusSeconds(600)))
+            .header("X-Organization-ID", tenant.toString())
+            .header("Idempotency-Key", IDS.next().toString())
+            .header("Content-Type", "application/json")
+            .POST(
+                HttpRequest.BodyPublishers.ofString(
+                    json.writeValueAsString(Map.of("id", IDS.next(), "sex", "FEMALE"))))
+            .build();
+    try (var client = HttpClient.newHttpClient()) {
+      assertThat(client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode())
+          .isEqualTo(403);
+    }
+  }
+
+  @Test
+  void compoundForeignKeysRejectCrossTenantMasterDataEvenWithoutApplicationChecks()
+      throws Exception {
+    var a = tenant();
+    var b = tenant();
+    var ownerA = owner(a);
+    var ownerB = owner(b);
+    var animalA = animal(a);
+    var animalB = animal(b);
+    var establishmentA = establishment(a);
+    var establishmentB = establishment(b);
+    var location = IDS.next();
+    assertThat(
+            post(
+                    a,
+                    "/establishments/" + establishmentA + "/operational-locations",
+                    Map.of("id", location, "name", "Local", "type", "LAB"))
+                .statusCode())
+        .isEqualTo(201);
+    var breed = IDS.next();
+    assertThat(post(b, "/breeds", Map.of("id", breed, "name", "Declared breed")).statusCode())
+        .isEqualTo(201);
+    var actor = context(a).actorId();
+    try (var connection = TestDatabase.runtimeConnection();
+        var statement = connection.createStatement()) {
+      for (var sql :
+          List.of(
+              "UPDATE operational_location SET establishment_id='"
+                  + establishmentB
+                  + "' WHERE id='"
+                  + location
+                  + "'",
+              "UPDATE animal SET breed_id='" + breed + "' WHERE id='" + animalA + "'",
+              "INSERT INTO animal_ownership_assignment(id,organization_id,animal_id,owner_id,valid_from,recorded_by,recorded_at) VALUES ('"
+                  + IDS.next()
+                  + "','"
+                  + a
+                  + "','"
+                  + animalA
+                  + "','"
+                  + ownerB
+                  + "','2026-01-01','"
+                  + actor
+                  + "',now())",
+              "INSERT INTO animal_ownership_assignment(id,organization_id,animal_id,owner_id,valid_from,recorded_by,recorded_at) VALUES ('"
+                  + IDS.next()
+                  + "','"
+                  + a
+                  + "','"
+                  + animalB
+                  + "','"
+                  + ownerA
+                  + "','2026-01-01','"
+                  + actor
+                  + "',now())"))
+        assertThatThrownBy(() -> statement.executeUpdate(sql))
+            .isInstanceOf(java.sql.SQLException.class)
+            .extracting("SQLState")
+            .isEqualTo("23503");
+    }
+  }
+
+  private com.bovina.platform.application.ExecutionContext context(UUID tenant) {
+    return access.resolve(
+        new com.bovina.identity.application.AuthenticatedIdentity(
+            TOKENS.issuer().toString(), "master-data-bootstrap"),
+        tenant,
+        IDS.next());
+  }
+
+  private Map<String, Object> importRow(UUID id, String name) {
+    return Map.of(
+        "itemId",
+        IDS.next(),
+        "id",
+        id,
+        "type",
+        "PERSON",
+        "displayName",
+        name,
+        "occurredAt",
+        Instant.EPOCH);
+  }
+
+  private Map<String, Object> importBatch(UUID id, String mode, List<Map<String, Object>> rows) {
+    return Map.of("batchId", id, "mode", mode, "items", rows);
   }
 
   private UUID animal(UUID tenant) throws Exception {
