@@ -154,6 +154,24 @@ class Phase5IT {
         .contains(transfer.toString(), d30.toString(), "RECORDED");
     assertThat(get(fixture.tenant(), "/pregnancy-follow-ups?cohort=D60&asOf=2026-10-31").body())
         .contains(transfer.toString(), corrected.toString(), "RECORDED");
+    var invalidationKey = IDS.next();
+    ok(
+        post(
+            fixture.tenant(),
+            "/pregnancy-checks/" + corrected + ":invalidate",
+            invalidationKey,
+            Map.of("reason", "Diagnostic evidence withdrawn")),
+        200);
+    ok(
+        post(
+            fixture.tenant(),
+            "/pregnancy-checks/" + corrected + ":invalidate",
+            invalidationKey,
+            Map.of("reason", "Diagnostic evidence withdrawn")),
+        200);
+    assertThat(get(fixture.tenant(), "/transfers/" + transfer + "/pregnancy-outcome").body())
+        .contains(d30.toString(), "PREGNANT")
+        .doesNotContain(corrected.toString());
     assertThat(
             jdbc.queryForObject(
                 "SELECT count(*) FROM pregnancy_check WHERE transfer_id=?",
@@ -199,6 +217,15 @@ class Phase5IT {
                 Integer.class,
                 fixture.tenant()))
         .isEqualTo(2);
+    var losingReservations =
+        responses.get(0).statusCode() == 200 ? secondReservations : firstReservations;
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM embryo_transfer_reservation WHERE id IN (?,?)",
+                Integer.class,
+                losingReservations.get(0),
+                losingReservations.get(1)))
+        .isZero();
 
     var reservation = winningReservations.getFirst();
     var ref = reservationRef(reservation);
@@ -264,12 +291,43 @@ class Phase5IT {
             "/transfers:bulk-reserve",
             reservationBatch(IDS.next(), replacement, cancelRef.embryo(), cancelRef.cycle(), 2)),
         200);
-    assertThat(
-            jdbc.queryForObject(
-                "SELECT count(*) FROM embryo_transfer_reservation WHERE embryo_id=? AND status='ACTIVE'",
-                Integer.class,
-                cancelRef.embryo()))
-        .isEqualTo(1);
+    var finalTransfer = IDS.next();
+    var finalPerformBatch = IDS.next();
+    var race =
+        concurrent(
+            () ->
+                post(
+                    fixture.tenant(),
+                    "/transfers:bulk-perform",
+                    finalPerformBatch,
+                    performanceBatch(
+                        finalPerformBatch,
+                        finalTransfer,
+                        replacement,
+                        3,
+                        fixture.professional(),
+                        Instant.parse("2026-09-01T12:00:00Z"))),
+            () ->
+                post(
+                    fixture.tenant(),
+                    "/transfer-reservations/" + replacement + ":cancel",
+                    IDS.next(),
+                    Map.of("expectedEmbryoVersion", 3, "reason", "Concurrent cancellation")));
+    assertThat(race).extracting(HttpResponse::statusCode).containsExactlyInAnyOrder(200, 409);
+    var finalState =
+        jdbc.queryForMap(
+            "SELECT r.status,e.availability_status FROM embryo_transfer_reservation r JOIN embryo e ON e.organization_id=r.organization_id AND e.id=r.embryo_id WHERE r.id=?",
+            replacement);
+    assertThat(finalState)
+        .satisfiesAnyOf(
+            state -> {
+              assertThat(state.get("status")).isEqualTo("CONSUMED");
+              assertThat(state.get("availability_status")).isEqualTo("TRANSFERRED");
+            },
+            state -> {
+              assertThat(state.get("status")).isEqualTo("CANCELLED");
+              assertThat(state.get("availability_status")).isEqualTo("AVAILABLE");
+            });
   }
 
   @Test
@@ -284,6 +342,21 @@ class Phase5IT {
             reservationBatch(IDS.next(), reservation, fixture.embryos().getFirst(), cycle, 0)),
         200);
     var transfer = IDS.next();
+    var rejectedThawed =
+        performanceBatch(
+            IDS.next(),
+            IDS.next(),
+            reservation,
+            1,
+            fixture.professional(),
+            Instant.parse("2026-09-01T12:00:00Z"));
+    @SuppressWarnings("unchecked")
+    var thawedItem =
+        new HashMap<>((Map<String, Object>) ((List<?>) rejectedThawed.get("items")).getFirst());
+    thawedItem.put("origin", "THAWED");
+    var thawedIntent = new HashMap<>(rejectedThawed);
+    thawedIntent.put("items", List.of(thawedItem));
+    ok(post(fixture.tenant(), "/transfers:bulk-perform", thawedIntent), 400);
     ok(
         post(
             fixture.tenant(),
@@ -325,6 +398,51 @@ class Phase5IT {
                     fixture.recipient(),
                     foreign.actor()))
         .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+
+    var duplicateReservation = IDS.next();
+    jdbc.update(
+        "INSERT INTO embryo_transfer_reservation(id,organization_id,embryo_id,recipient_cycle_id,status,reserved_by,reserved_at,ended_by,ended_at,end_reason) VALUES (?,?,?,?,'CONSUMED',?,now(),?,now(),'TRANSFER_PERFORMED')",
+        duplicateReservation,
+        fixture.tenant(),
+        fixture.embryos().getFirst(),
+        cycle,
+        fixture.actor(),
+        fixture.actor());
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "INSERT INTO embryo_transfer(id,organization_id,reservation_id,embryo_id,recipient_cycle_id,performed_at,performed_timezone,transfer_origin,operator_professional_id,origin_type,recorded_by,recorded_at) VALUES (?,?,?,?,?,now(),'UTC','FRESH',?,'MANUAL',?,now())",
+                    IDS.next(),
+                    fixture.tenant(),
+                    duplicateReservation,
+                    fixture.embryos().getFirst(),
+                    cycle,
+                    fixture.professional(),
+                    fixture.actor()))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+
+    var readOnlySubject = "phase5-readonly-" + IDS.next();
+    ok(
+        post(
+            fixture.tenant(),
+            "/memberships",
+            Map.of("id", IDS.next(), "subject", readOnlySubject, "role", "READ_ONLY")),
+        201);
+    ok(getAs(readOnlySubject, fixture.tenant(), "/recipient-cycles/" + cycle), 200);
+    ok(
+        postAs(
+            readOnlySubject,
+            fixture.tenant(),
+            "/recipient-cycles",
+            IDS.next(),
+            Map.of(
+                "id",
+                IDS.next(),
+                "recipientAnimalId",
+                fixture.recipient(),
+                "openedOn",
+                "2026-12-01")),
+        403);
 
     try (var connection = TestDatabase.runtimeConnection();
         var statement = connection.createStatement()) {
@@ -717,8 +835,23 @@ class Phase5IT {
     return request("GET", tenant, path, null, null);
   }
 
+  private HttpResponse<String> getAs(String subject, UUID tenant, String path) throws Exception {
+    return requestAs(subject, "GET", tenant, path, null, null);
+  }
+
+  private HttpResponse<String> postAs(
+      String subject, UUID tenant, String path, UUID key, Object body) throws Exception {
+    return requestAs(subject, "POST", tenant, path, key, body);
+  }
+
   private HttpResponse<String> request(
       String method, UUID tenant, String path, UUID key, Object body) throws Exception {
+    return requestAs("phase5-bootstrap", method, tenant, path, key, body);
+  }
+
+  private HttpResponse<String> requestAs(
+      String subject, String method, UUID tenant, String path, UUID key, Object body)
+      throws Exception {
     var builder =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1" + path))
             .timeout(Duration.ofSeconds(30))
@@ -726,7 +859,7 @@ class Phase5IT {
                 "Authorization",
                 "Bearer "
                     + TOKENS.token(
-                        "phase5-bootstrap",
+                        subject,
                         TOKENS.issuer().toString(),
                         "bovina-test",
                         Instant.now().plusSeconds(600)))
