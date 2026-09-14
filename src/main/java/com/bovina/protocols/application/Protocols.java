@@ -11,7 +11,7 @@ import java.time.*;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.*;
 
 @Service
 public class Protocols {
@@ -153,6 +153,18 @@ public class Protocols {
     d.requireActive();
     v.requireApplicable(d.purpose(), purpose, on);
     return new AppliedVersion(v.id(), v.definitionId(), d.purpose(), v.revision(), v.checksum());
+  }
+
+  @Transactional(propagation = Propagation.MANDATORY)
+  public ProtocolVersion requireAvailableVersion(UUID tenant, UUID versionId) {
+    var version =
+        protocols.version(tenant, versionId).orElseThrow(() -> missing("PROTOCOL_VERSION"));
+    if (protocols.withdrawal(tenant, versionId).isPresent())
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT,
+          "PROTOCOL_VERSION_WITHDRAWN",
+          "Protocol version is withdrawn from new use");
+    return version;
   }
 
   private ProtocolDefinition find(ExecutionContext c, UUID id) {

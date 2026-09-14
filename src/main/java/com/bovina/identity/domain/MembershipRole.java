@@ -19,6 +19,8 @@ public enum MembershipRole {
           "fertilization:write",
           "embryology:read",
           "embryology:write",
+          "transfer:read",
+          "transfer:write",
           "lineage:correct")),
   OPERATOR(
       Set.of(
@@ -33,7 +35,9 @@ public enum MembershipRole {
           "fertilization:read",
           "fertilization:write",
           "embryology:read",
-          "embryology:write")),
+          "embryology:write",
+          "transfer:read",
+          "transfer:write")),
   READ_ONLY(
       Set.of(
           "client:read",
@@ -41,7 +45,8 @@ public enum MembershipRole {
           "opu:read",
           "semen:read",
           "fertilization:read",
-          "embryology:read"));
+          "embryology:read",
+          "transfer:read"));
 
   private final Set<String> permissions;
 
