@@ -4,9 +4,11 @@ import com.bovina.platform.application.*;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.*;
+import org.hibernate.annotations.DynamicUpdate;
 
 @Entity
 @Table(name = "embryo_transfer_reservation")
+@DynamicUpdate
 public class TransferReservation {
   @Id private UUID id;
 

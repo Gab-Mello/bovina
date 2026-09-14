@@ -17,8 +17,20 @@ public class RecipientDirectory {
 
   @Transactional(propagation = Propagation.MANDATORY)
   public Recipient requireActive(UUID tenant, UUID id) {
-    var recipient = snapshots(tenant, List.of(id)).get(id);
-    if (recipient == null) throw missing();
+    var recipient =
+        jdbc
+            .query(
+                "SELECT id,name,sex,status FROM animal WHERE organization_id=:tenant AND id=:id FOR SHARE",
+                Map.of("tenant", tenant, "id", id),
+                (rs, row) ->
+                    new Recipient(
+                        rs.getObject("id", UUID.class),
+                        rs.getString("name"),
+                        rs.getString("sex"),
+                        rs.getString("status")))
+            .stream()
+            .findFirst()
+            .orElseThrow(RecipientDirectory::missing);
     if (!recipient.sex().equals("FEMALE") || !recipient.status().equals("ACTIVE"))
       throw new ApplicationFailure(
           ApplicationFailure.Kind.REJECTED,
@@ -34,7 +46,7 @@ public class RecipientDirectory {
       throw new IllegalArgumentException("Snapshot page exceeds 100 recipients");
     return jdbc
         .query(
-            "SELECT id,name,sex,status FROM animal WHERE organization_id=:tenant AND id IN (:ids) ORDER BY id FOR SHARE",
+            "SELECT id,name,sex,status FROM animal WHERE organization_id=:tenant AND id IN (:ids) ORDER BY id",
             Map.of("tenant", tenant, "ids", ids),
             (rs, row) ->
                 new Recipient(

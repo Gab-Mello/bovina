@@ -70,7 +70,7 @@ public class PregnancyChecks {
             .map(PregnancyCheckBatch.Item::supersedesCheckId)
             .filter(Objects::nonNull)
             .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
-    var superseded = checks.lockChecks(c.tenantId(), supersededIds);
+    var superseded = checks.checks(c.tenantId(), supersededIds);
     if (superseded.size() != supersededIds.size()) throw missing("PREGNANCY_CHECK");
     if (!checks.invalidated(c.tenantId(), supersededIds).isEmpty())
       throw conflict("PREGNANCY_CHECK_ALREADY_INVALIDATED", "Check is already invalidated");
@@ -158,7 +158,7 @@ public class PregnancyChecks {
         InvalidationView.class,
         () -> {
           var check =
-              Optional.ofNullable(checks.lockChecks(c.tenantId(), List.of(checkId)).get(checkId))
+              Optional.ofNullable(checks.checks(c.tenantId(), List.of(checkId)).get(checkId))
                   .orElseThrow(() -> missing("PREGNANCY_CHECK"));
           if (!checks.invalidated(c.tenantId(), List.of(checkId)).isEmpty())
             throw conflict("PREGNANCY_CHECK_ALREADY_INVALIDATED", "Check is already invalidated");

@@ -34,11 +34,11 @@ public class PregnancyCheckStore {
         (ps, check) -> bind(ps, tenant, check));
   }
 
-  public Map<UUID, PregnancyCheck> lockChecks(UUID tenant, Collection<UUID> ids) {
+  public Map<UUID, PregnancyCheck> checks(UUID tenant, Collection<UUID> ids) {
     if (ids.isEmpty()) return Map.of();
     return named
         .query(
-            "SELECT * FROM pregnancy_check WHERE organization_id=:tenant AND id IN (:ids) ORDER BY id FOR UPDATE",
+            "SELECT * FROM pregnancy_check WHERE organization_id=:tenant AND id IN (:ids) ORDER BY id",
             Map.of("tenant", tenant, "ids", ids),
             CHECK)
         .stream()
@@ -155,7 +155,8 @@ public class PregnancyCheckStore {
                 rs.getObject("check_id", UUID.class),
                 rs.getString("result"),
                 instant(rs, "checked_at"),
-                rs.getString("checked_timezone")),
+                rs.getString("checked_timezone"),
+                rs.getObject("check_id") == null ? "DUE" : "RECORDED"),
         window.fromDay(),
         window.throughDay(),
         tenant,
@@ -248,9 +249,6 @@ public class PregnancyCheckStore {
       UUID checkId,
       String result,
       Instant checkedAt,
-      String checkedTimezone) {
-    public String status() {
-      return checkId == null ? "DUE" : "RECORDED";
-    }
-  }
+      String checkedTimezone,
+      String status) {}
 }

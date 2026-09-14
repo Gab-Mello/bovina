@@ -5,9 +5,11 @@ import com.bovina.platform.domain.DataProvenance;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.util.*;
+import org.hibernate.annotations.DynamicUpdate;
 
 @Entity
 @Table(name = "recipient_cycle")
+@DynamicUpdate
 public class RecipientCycle {
   @Id private UUID id;
 
