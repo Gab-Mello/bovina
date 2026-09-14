@@ -28,11 +28,22 @@ public class CollectionAllocationBoundary {
     var c =
         collections.lock(context.tenantId(), collectionId).orElseThrow(OocyteCollections::missing);
     c.requireAllocatable();
-    return new Capacity(c.id(), c.sessionId(), c.donorId(), c.version(), c.counts().viable());
+    return new Capacity(
+        c.id(),
+        c.sessionId(),
+        c.donorId(),
+        c.registration().collectedAt(),
+        c.version(),
+        c.counts().viable());
   }
 
   public record Capacity(
-      UUID collectionId, UUID sessionId, UUID donorId, long version, int viable) {
+      UUID collectionId,
+      UUID sessionId,
+      UUID donorId,
+      java.time.Instant collectedAt,
+      long version,
+      int viable) {
     public long availableAfter(long confirmedAllocation) {
       return new OocyteCounts(viable, viable, null).availableAfter(confirmedAllocation);
     }
