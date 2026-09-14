@@ -32,6 +32,8 @@ class OpuIT {
   @Autowired TenantAccess access;
   @Autowired CollectionAllocationBoundary allocation;
   @Autowired PlatformTransactionManager transactions;
+  @Autowired RecordCollections recorder;
+  @Autowired jakarta.persistence.EntityManagerFactory entityManagers;
 
   @DynamicPropertySource
   static void config(DynamicPropertyRegistry r) {
@@ -41,6 +43,9 @@ class OpuIT {
     r.add("bovina.bootstrap.enabled", () -> true);
     r.add("bovina.bootstrap.issuer", () -> TOKENS.issuer().toString());
     r.add("bovina.bootstrap.subject", () -> "opu-bootstrap");
+    r.add("bovina.opu.intake.transport-enabled", () -> true);
+    r.add("bovina.opu.intake.external-receipt-enabled", () -> true);
+    r.add("spring.jpa.properties.hibernate.generate_statistics", () -> true);
   }
 
   @AfterAll
@@ -60,6 +65,9 @@ class OpuIT {
     var before = get(f.tenant(), "/oocyte-collections/" + collection);
     ok(before, 200);
     assertThat(before.body()).contains("MANUAL").doesNotContain("sire", "semen", "mating", "Fiv");
+    var observed = get(f.tenant(), "/animals?role=DONOR");
+    ok(observed, 200);
+    assertThat(observed.body()).contains(donor.toString());
     var completionKey = IDS.next();
     var complete =
         post(f.tenant(), path(f) + ":complete", completionKey, Map.of("expectedVersion", 1));
@@ -355,8 +363,8 @@ class OpuIT {
                             return true;
                           }));
       try {
-        assertThatThrownBy(() -> second.get(200, TimeUnit.MILLISECONDS))
-            .isInstanceOf(TimeoutException.class);
+        awaitCollectionLock();
+        assertThat(second.isDone()).isFalse();
       } finally {
         release.countDown();
       }
@@ -373,6 +381,212 @@ class OpuIT {
     }
   }
 
+  private void awaitCollectionLock() throws Exception {
+    var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+    while (System.nanoTime() < deadline) {
+      if (jdbc.queryForObject(
+              "SELECT count(*) FROM pg_stat_activity WHERE usename=current_user AND wait_event_type='Lock' AND query ILIKE '%oocyte_collection%'",
+              Integer.class)
+          > 0) return;
+      Thread.sleep(10);
+    }
+    fail("Second allocation preparation did not reach the PostgreSQL lock");
+  }
+
+  @Test
+  void transportRecordsObservedDivergenceWithoutChangingCollectionCounts() throws Exception {
+    var f = fixture();
+    var id = IDS.next();
+    ok(
+        post(f.tenant(), path(f) + "/collections:bulk", batch(row(id, animal(f.tenant()), 8, 6))),
+        200);
+    var transport = IDS.next();
+    var input =
+        Map.of(
+            "id",
+            transport,
+            "sourceSessionId",
+            f.session(),
+            "destinationEstablishmentId",
+            f.establishment(),
+            "dispatchedAt",
+            Instant.EPOCH,
+            "receivedAt",
+            Instant.EPOCH.plusSeconds(36 * 3600),
+            "items",
+            List.of(Map.of("collectionId", id, "quantityAtDispatch", 8, "quantityAtReceipt", 5)));
+    var key = IDS.next();
+    var result = post(f.tenant(), "/oocyte-transports", key, input);
+    ok(result, 201);
+    assertThat(json.readTree(post(f.tenant(), "/oocyte-transports", key, input).body()))
+        .isEqualTo(json.readTree(result.body()));
+    var read = get(f.tenant(), "/oocyte-transports/" + transport);
+    ok(read, 200);
+    assertThat(read.body())
+        .contains("quantityAtDispatch", "quantityAtReceipt")
+        .doesNotContain("WITHIN_PROTOCOL", "ACCEPTED");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT viable FROM oocyte_collection WHERE id=?", Integer.class, id))
+        .isEqualTo(6);
+    var other = fixture();
+    ok(get(other.tenant(), "/oocyte-transports/" + transport), 404);
+    var mismatch = new HashMap<String, Object>(input);
+    mismatch.put("id", IDS.next());
+    mismatch.put("sourceSessionId", other.session());
+    ok(post(other.tenant(), "/oocyte-transports", mismatch), 404);
+    mismatch.put("destinationEstablishmentId", other.establishment());
+    ok(post(other.tenant(), "/oocyte-transports", mismatch), 409);
+    try (var connection = TestDatabase.runtimeConnection();
+        var s = connection.createStatement()) {
+      assertThatThrownBy(
+              () ->
+                  s.executeUpdate(
+                      "UPDATE oocyte_transport SET notes='rewrite' WHERE id='" + transport + "'"))
+          .isInstanceOf(java.sql.SQLException.class)
+          .extracting("SQLState")
+          .isEqualTo("42501");
+    }
+  }
+
+  @Test
+  void externalReceiptDoesNotFabricateLocalSessionDonorOrApproval() throws Exception {
+    var f = fixture();
+    var id = IDS.next();
+    var key = IDS.next();
+    var input =
+        Map.of(
+            "id",
+            id,
+            "receivedAt",
+            Instant.EPOCH,
+            "sourceReference",
+            "External lab declared shipment #42",
+            "totalReceived",
+            12);
+    var result = post(f.tenant(), "/external-oocyte-receipts", key, input);
+    ok(result, 201);
+    assertThat(result.body())
+        .contains("RECEIVED", "MANUAL")
+        .doesNotContain("ACCEPTED", "donorId", "sourceOpuSessionId");
+    assertThat(json.readTree(post(f.tenant(), "/external-oocyte-receipts", key, input).body()))
+        .isEqualTo(json.readTree(result.body()));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM opu_session WHERE organization_id=?",
+                Integer.class,
+                f.tenant()))
+        .isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM oocyte_collection WHERE organization_id=?",
+                Integer.class,
+                f.tenant()))
+        .isZero();
+    var invalid = new HashMap<String, Object>(input);
+    invalid.remove("totalReceived");
+    ok(post(f.tenant(), "/external-oocyte-receipts", invalid), 400);
+    var foreign = fixture();
+    ok(get(foreign.tenant(), "/external-oocyte-receipts/" + id), 404);
+  }
+
+  @Test
+  void readOnlyMembershipCannotRecordOpuEvenWithoutHttp() throws Exception {
+    var f = fixture();
+    var subject = "opu-reader-" + IDS.next();
+    ok(
+        post(
+            f.tenant(),
+            "/memberships",
+            Map.of("id", IDS.next(), "subject", subject, "role", "READ_ONLY")),
+        201);
+    var c =
+        access.resolve(
+            new AuthenticatedIdentity(TOKENS.issuer().toString(), subject), f.tenant(), IDS.next());
+    var input =
+        json.readValue(
+            json.writeValueAsString(batch(row(IDS.next(), animal(f.tenant()), 1, 1))),
+            CollectionBatch.class);
+    assertThatThrownBy(() -> recorder.record(c, input.batchId(), f.session(), input))
+        .isInstanceOf(ApplicationFailure.class)
+        .extracting("code")
+        .isEqualTo("ACCESS_DENIED");
+    var request =
+        HttpRequest.newBuilder(
+                URI.create("http://localhost:" + port + "/api/v1" + path(f) + ":complete"))
+            .header(
+                "Authorization",
+                "Bearer "
+                    + TOKENS.token(
+                        subject,
+                        TOKENS.issuer().toString(),
+                        "bovina-test",
+                        Instant.now().plusSeconds(600)))
+            .header("X-Organization-ID", f.tenant().toString())
+            .header("Idempotency-Key", IDS.next().toString())
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString("{\"expectedVersion\":1}"))
+            .build();
+    try (var client = HttpClient.newHttpClient()) {
+      ok(client.send(request, HttpResponse.BodyHandlers.ofString()), 403);
+    }
+  }
+
+  @Test
+  void completionUsesBoundedQueriesAndDoesNotLoadACollectionGraph() throws Exception {
+    var f = fixture();
+    var rows = new ArrayList<Map<String, Object>>();
+    for (int i = 0; i < 20; i++) rows.add(row(IDS.next(), animal(f.tenant()), 2, 1));
+    var input = Map.of("batchId", IDS.next(), "expectedSessionVersion", 1, "items", rows);
+    ok(post(f.tenant(), path(f) + "/collections:bulk", input), 200);
+    var statistics = entityManagers.unwrap(org.hibernate.SessionFactory.class).getStatistics();
+    statistics.clear();
+    ok(post(f.tenant(), path(f) + ":complete", Map.of("expectedVersion", 1)), 200);
+    assertThat(statistics.getPrepareStatementCount()).isLessThan(20);
+    assertThat(statistics.getCollectionFetchCount()).isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM oocyte_donor_snapshot WHERE organization_id=?",
+                Integer.class,
+                f.tenant()))
+        .isEqualTo(20);
+    var page = get(f.tenant(), path(f) + "/collections?size=3&page=1");
+    ok(page, 200);
+    assertThat(json.readTree(page.body()).path("items").size()).isEqualTo(3);
+  }
+
+  @Test
+  void completionAndBulkShareTheSameTransactionFence() throws Exception {
+    var f = fixture();
+    var id = IDS.next();
+    var input = batch(row(id, animal(f.tenant()), 4, 3));
+    var barrier = new CyclicBarrier(2);
+    try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+      var bulk =
+          executor.submit(
+              () -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return post(f.tenant(), path(f) + "/collections:bulk", input);
+              });
+      var complete =
+          executor.submit(
+              () -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return post(f.tenant(), path(f) + ":complete", Map.of("expectedVersion", 1));
+              });
+      ok(complete.get(20, TimeUnit.SECONDS), 200);
+      var result = bulk.get(20, TimeUnit.SECONDS);
+      assertThat(result.statusCode()).isIn(200, 409);
+      var statuses =
+          jdbc.queryForList(
+              "SELECT status FROM oocyte_collection WHERE opu_session_id=?",
+              String.class,
+              f.session());
+      if (result.statusCode() == 200) assertThat(statuses).containsExactly("COMPLETED");
+      else assertThat(statuses).isEmpty();
+    }
+  }
+
   private Map<String, Object> correction(long version, int total, int viable) {
     return Map.of(
         "expectedVersion",
@@ -383,6 +597,7 @@ class OpuIT {
         "Observed count correction");
   }
 
+  @SafeVarargs
   private Map<String, Object> batch(Map<String, Object>... items) {
     return Map.of("batchId", IDS.next(), "expectedSessionVersion", 1, "items", List.of(items));
   }

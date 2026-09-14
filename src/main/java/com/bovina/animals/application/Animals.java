@@ -89,10 +89,6 @@ public class Animals {
       LocalDate ownedOn,
       Animal.Role observedRole) {
     access.require(context, "master-data:read");
-    // Registration is not evidence of a performed procedure. This milestone has no role-producing
-    // facts.
-    if (observedRole != null)
-      return new PageResult<>(java.util.List.of(), page.page(), page.size());
     return new PageResult<>(
         animals
             .search(
@@ -100,6 +96,7 @@ public class Animals {
                 java.text.Normalizer.normalize(page.pattern(), java.text.Normalizer.Form.NFC),
                 owner,
                 ownedOn,
+                observedRole == null ? null : observedRole.name(),
                 PageRequest.of(page.page(), page.size()))
             .stream()
             .map(Animals::view)
