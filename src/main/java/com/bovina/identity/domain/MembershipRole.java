@@ -12,7 +12,14 @@ public enum MembershipRole {
           "master-data:write",
           "protocol:manage",
           "opu:read",
-          "opu:write")),
+          "opu:write",
+          "semen:read",
+          "semen:write",
+          "fertilization:read",
+          "fertilization:write",
+          "embryology:read",
+          "embryology:write",
+          "lineage:correct")),
   OPERATOR(
       Set.of(
           "client:read",
@@ -20,8 +27,21 @@ public enum MembershipRole {
           "master-data:read",
           "master-data:write",
           "opu:read",
-          "opu:write")),
-  READ_ONLY(Set.of("client:read", "master-data:read", "opu:read"));
+          "opu:write",
+          "semen:read",
+          "semen:write",
+          "fertilization:read",
+          "fertilization:write",
+          "embryology:read",
+          "embryology:write")),
+  READ_ONLY(
+      Set.of(
+          "client:read",
+          "master-data:read",
+          "opu:read",
+          "semen:read",
+          "fertilization:read",
+          "embryology:read"));
 
   private final Set<String> permissions;
 

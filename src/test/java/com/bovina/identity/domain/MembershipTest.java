@@ -22,10 +22,17 @@ class MembershipTest {
   @Test
   void readOnlyCannotCreateClientsOrManageMemberships() {
     assertThat(MembershipRole.READ_ONLY.permissions())
-        .containsExactlyInAnyOrder("client:read", "master-data:read", "opu:read");
+        .containsExactlyInAnyOrder(
+            "client:read",
+            "master-data:read",
+            "opu:read",
+            "semen:read",
+            "fertilization:read",
+            "embryology:read");
     assertThat(MembershipRole.READ_ONLY.permissions()).doesNotContain("opu:write");
     assertThat(MembershipRole.OPERATOR.permissions()).doesNotContain("membership:manage");
     assertThat(MembershipRole.OPERATOR.permissions()).doesNotContain("protocol:manage");
+    assertThat(MembershipRole.OPERATOR.permissions()).doesNotContain("lineage:correct");
   }
 
   @Test
