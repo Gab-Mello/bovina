@@ -289,9 +289,7 @@ class Phase4IT {
       assertThatThrownBy(
               () ->
                   statement.executeUpdate(
-                      "UPDATE assessment_code SET display_name='rewrite' WHERE id='"
-                          + stage
-                          + "'"))
+                      "UPDATE assessment_code SET display_name='rewrite' WHERE id='" + stage + "'"))
           .isInstanceOf(java.sql.SQLException.class)
           .extracting("SQLState")
           .isEqualTo("42501");
