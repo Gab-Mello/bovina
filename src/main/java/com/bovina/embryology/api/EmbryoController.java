@@ -58,40 +58,6 @@ public class EmbryoController {
     return embryos.search(context(jwt, tenant, request), matingId, new SearchPage("", page, size));
   }
 
-  @PostMapping("/embryos/{id}:reserve")
-  public Embryos.View reserve(
-      @AuthenticationPrincipal Jwt jwt,
-      @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
-      HttpServletRequest request,
-      @RequestHeader("Idempotency-Key") UUID key,
-      @PathVariable UUID id,
-      @Valid @RequestBody VersionRequest body) {
-    return embryos.transition(
-        context(jwt, tenant, request),
-        key,
-        id,
-        body.expectedVersion(),
-        Embryos.Action.RESERVE,
-        null);
-  }
-
-  @PostMapping("/embryos/{id}:release-reservation")
-  public Embryos.View release(
-      @AuthenticationPrincipal Jwt jwt,
-      @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
-      HttpServletRequest request,
-      @RequestHeader("Idempotency-Key") UUID key,
-      @PathVariable UUID id,
-      @Valid @RequestBody VersionRequest body) {
-    return embryos.transition(
-        context(jwt, tenant, request),
-        key,
-        id,
-        body.expectedVersion(),
-        Embryos.Action.RELEASE_RESERVATION,
-        null);
-  }
-
   @PostMapping("/embryos/{id}:discard")
   public Embryos.View discard(
       @AuthenticationPrincipal Jwt jwt,

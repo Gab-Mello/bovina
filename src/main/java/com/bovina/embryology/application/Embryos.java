@@ -15,6 +15,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -154,6 +155,12 @@ public class Embryos {
         page.size());
   }
 
+  @Transactional(propagation = Propagation.MANDATORY)
+  public Lineage lineage(UUID tenant, UUID id) {
+    var embryo = find(tenant, id, false);
+    return new Lineage(embryo.id(), embryo.matingId(), matings.lineage(tenant, embryo.matingId()));
+  }
+
   @Transactional
   public View transition(
       ExecutionContext c, UUID key, UUID id, long expectedVersion, Action action, String reason) {
@@ -178,8 +185,6 @@ public class Embryos {
                 "Release active holds before changing availability");
           var before = embryo.availability().name();
           switch (action) {
-            case RESERVE -> embryo.reserve();
-            case RELEASE_RESERVATION -> embryo.releaseReservation();
             case DISCARD -> embryo.discard();
           }
           repository.flush();
@@ -303,8 +308,6 @@ public class Embryos {
   }
 
   public enum Action {
-    RESERVE,
-    RELEASE_RESERVATION,
     DISCARD
   }
 
@@ -331,6 +334,11 @@ public class Embryos {
       holds = List.copyOf(holds);
     }
   }
+
+  public record Lineage(
+      UUID embryoId,
+      UUID matingId,
+      com.bovina.fertilization.application.MatingLineageSnapshot mating) {}
 
   private record TransitionIntent(UUID id, long version, Action action, String reason) {}
 

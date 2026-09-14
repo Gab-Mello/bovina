@@ -136,8 +136,6 @@ public class RecipientCycles {
   @Transactional(propagation = Propagation.MANDATORY)
   public Map<UUID, RecipientCycle> lockOpen(UUID tenant, Collection<UUID> ids) {
     var distinct = new TreeSet<>(ids);
-    if (distinct.size() != ids.size())
-      throw rejected("DUPLICATE_RECIPIENT_CYCLE", "A recipient cycle appears more than once");
     var cycles = repository.lockAll(tenant, distinct);
     if (cycles.size() != distinct.size()) throw missing();
     var result = new HashMap<UUID, RecipientCycle>();

@@ -220,7 +220,10 @@ class Phase4IT {
             Map.of("id", hold, "type", "QUALITY", "reason", "Review pending")),
         200);
     ok(
-        post(fixture.tenant(), "/embryos/" + embryo + ":reserve", Map.of("expectedVersion", 0)),
+        post(
+            fixture.tenant(),
+            "/embryos/" + embryo + ":discard",
+            Map.of("expectedVersion", 0, "reason", "Blocked while on hold")),
         409);
     ok(
         post(
@@ -229,7 +232,10 @@ class Phase4IT {
             Map.of("reason", "Review completed")),
         200);
     ok(
-        post(fixture.tenant(), "/embryos/" + embryo + ":reserve", Map.of("expectedVersion", 0)),
+        post(
+            fixture.tenant(),
+            "/embryos/" + embryo + ":discard",
+            Map.of("expectedVersion", 0, "reason", "Assessment completed")),
         200);
 
     var disposition = IDS.next();

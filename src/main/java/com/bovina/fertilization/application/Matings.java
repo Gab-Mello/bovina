@@ -221,6 +221,12 @@ public class Matings {
     store.complete(tenant, id, expectedVersion);
   }
 
+  @Transactional(propagation = Propagation.MANDATORY)
+  public MatingLineageSnapshot lineage(UUID tenant, UUID id) {
+    find(tenant, id, false);
+    return store.snapshot(tenant, id);
+  }
+
   private Mating find(UUID tenant, UUID id, boolean lock) {
     return store
         .find(tenant, id, lock)

@@ -18,6 +18,10 @@ public interface EmbryoRepository extends Repository<Embryo, UUID> {
   @Query("select e from Embryo e where e.organizationId=:tenant and e.id=:id")
   Optional<Embryo> lock(UUID tenant, UUID id);
 
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select e from Embryo e where e.organizationId=:tenant and e.id in :ids order by e.id")
+  List<Embryo> lockAll(UUID tenant, Collection<UUID> ids);
+
   @Query(
       "select e from Embryo e where e.organizationId=:tenant and e.matingId=:mating order by e.id")
   List<Embryo> page(UUID tenant, UUID mating, Pageable pageable);

@@ -57,6 +57,11 @@ public class Embryo {
     availabilityStatus = AvailabilityStatus.AVAILABLE;
   }
 
+  public void performTransfer() {
+    require(AvailabilityStatus.RESERVED, "EMBRYO_NOT_RESERVED");
+    availabilityStatus = AvailabilityStatus.TRANSFERRED;
+  }
+
   public void discard() {
     if (availabilityStatus != AvailabilityStatus.AVAILABLE)
       throw conflict("EMBRYO_NOT_DISCARDABLE");

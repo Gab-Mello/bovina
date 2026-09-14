@@ -62,6 +62,21 @@ public class EmbryologyFacts {
             embryo));
   }
 
+  public Set<UUID> embryosWithActiveHold(UUID tenant, Collection<UUID> embryos) {
+    if (embryos.isEmpty()) return Set.of();
+    var placeholders = String.join(",", Collections.nCopies(embryos.size(), "?"));
+    var parameters = new ArrayList<Object>(embryos.size() + 1);
+    parameters.add(tenant);
+    parameters.addAll(embryos);
+    return Set.copyOf(
+        jdbc.query(
+            "SELECT DISTINCT embryo_id FROM embryo_hold WHERE organization_id=? AND released_at IS NULL AND embryo_id IN ("
+                + placeholders
+                + ")",
+            (rs, row) -> rs.getObject(1, UUID.class),
+            parameters.toArray()));
+  }
+
   public Hold openHold(
       UUID tenant, UUID id, UUID embryo, String type, String reason, UUID actor, Instant now) {
     jdbc.update(
