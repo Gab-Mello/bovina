@@ -157,4 +157,18 @@ public class MatingStore {
         actor,
         Timestamp.from(now));
   }
+
+  public void complete(UUID tenant, UUID mating, long expectedVersion) {
+    var changed =
+        jdbc.update(
+            "UPDATE mating SET status='COMPLETED',version=version+1 WHERE organization_id=? AND id=? AND status='FERTILIZED' AND version=?",
+            tenant,
+            mating,
+            expectedVersion);
+    if (changed != 1)
+      throw new com.bovina.platform.application.ApplicationFailure(
+          com.bovina.platform.application.ApplicationFailure.Kind.CONFLICT,
+          "MATING_COMPLETION_CONFLICT",
+          "Mating changed or is already completed");
+  }
 }

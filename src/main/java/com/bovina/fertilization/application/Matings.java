@@ -15,6 +15,7 @@ import java.time.*;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -208,6 +209,18 @@ public class Matings {
         });
   }
 
+  @Transactional(propagation = Propagation.MANDATORY)
+  public EmbryologyCapacity lockForEmbryology(UUID tenant, UUID id) {
+    var mating = find(tenant, id, true);
+    mating.requireEmbryologyOpen();
+    return new EmbryologyCapacity(mating.id(), mating.allocatedOocytes(), mating.version());
+  }
+
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void completeEmbryology(UUID tenant, UUID id, long expectedVersion) {
+    store.complete(tenant, id, expectedVersion);
+  }
+
   private Mating find(UUID tenant, UUID id, boolean lock) {
     return store
         .find(tenant, id, lock)
@@ -227,6 +240,8 @@ public class Matings {
       UUID proposedSemenBatchId, Instant proposedFertilizedAt, String reason) {}
 
   public record CorrectionView(UUID id, UUID matingId, String status, Instant requestedAt) {}
+
+  public record EmbryologyCapacity(UUID matingId, int allocatedOocytes, long version) {}
 
   private record CorrectionIntent(UUID matingId, Correction correction) {}
 }
