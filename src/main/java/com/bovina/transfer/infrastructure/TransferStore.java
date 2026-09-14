@@ -85,6 +85,17 @@ public class TransferStore {
         .findFirst();
   }
 
+  public Map<UUID, EmbryoTransfer> transfers(UUID tenant, Collection<UUID> ids) {
+    if (ids.isEmpty()) return Map.of();
+    return named
+        .query(
+            "SELECT * FROM embryo_transfer WHERE organization_id=:tenant AND id IN (:ids)",
+            Map.of("tenant", tenant, "ids", ids),
+            TRANSFER)
+        .stream()
+        .collect(java.util.stream.Collectors.toUnmodifiableMap(EmbryoTransfer::id, t -> t));
+  }
+
   public List<EmbryoTransfer> transfers(
       UUID tenant, UUID cycle, UUID embryo, int limit, int offset) {
     return jdbc.query(
