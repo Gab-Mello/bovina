@@ -65,7 +65,7 @@ public class AssessmentSchemeController {
                             new AssessmentSchemes.CodeInput(
                                 c.id(), c.dimension(), c.code(), c.displayName(), c.sortOrder()))
                     .toList()));
-    return ResponseEntity.created(URI.create("/api/v1/assessment-scheme-versions/" + result.id()))
+    return ResponseEntity.created(URI.create("/api/v1/assessment-schemes/versions/" + result.id()))
         .body(result);
   }
 

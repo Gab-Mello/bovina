@@ -162,7 +162,7 @@ class Phase4IT {
     var version = IDS.next();
     var stage = IDS.next();
     var grade = IDS.next();
-    ok(
+    var published =
         post(
             fixture.tenant(),
             "/assessment-schemes/" + scheme + "/versions",
@@ -194,8 +194,10 @@ class Phase4IT {
                         "displayName",
                         "Grade A",
                         "sortOrder",
-                        1)))),
-        201);
+                        1))));
+    ok(published, 201);
+    assertThat(published.headers().firstValue("Location"))
+        .contains("/api/v1/assessment-schemes/versions/" + version);
     var firstEvaluation = IDS.next();
     evaluate(fixture.tenant(), embryo, firstEvaluation, version, stage, grade, null);
     var secondEvaluation = IDS.next();
