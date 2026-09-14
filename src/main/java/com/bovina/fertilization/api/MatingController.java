@@ -15,7 +15,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/matings")
+@RequestMapping("/api/v1")
 public class MatingController {
   private final TenantAccess access;
   private final Matings matings;
@@ -25,7 +25,7 @@ public class MatingController {
     this.matings = matings;
   }
 
-  @PostMapping(":bulk")
+  @PostMapping("/matings:bulk")
   public MatingBatch.Result allocate(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
@@ -35,7 +35,7 @@ public class MatingController {
     return matings.allocate(context(jwt, tenant, request), key, input.batch());
   }
 
-  @GetMapping("/{id}")
+  @GetMapping("/matings/{id}")
   public Matings.View get(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
@@ -44,7 +44,7 @@ public class MatingController {
     return matings.get(context(jwt, tenant, request), id);
   }
 
-  @GetMapping
+  @GetMapping("/matings")
   public PageResult<Mating> search(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
@@ -57,7 +57,7 @@ public class MatingController {
         context(jwt, tenant, request), collectionId, semenBatchId, new SearchPage("", page, size));
   }
 
-  @PostMapping("/{id}/corrections")
+  @PostMapping("/matings/{id}/corrections")
   public Matings.CorrectionView requestCorrection(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,

@@ -98,7 +98,7 @@ public class Matings {
         .map(MatingBatch.Item::semenBatchId)
         .distinct()
         .sorted()
-        .forEach(id -> lineages.put(id, semen.lockLineage(c.tenantId(), id)));
+        .forEach(id -> lineages.put(id, semen.requireLineage(c.tenantId(), id)));
 
     batch.items().stream()
         .map(MatingBatch.Item::responsibleProfessionalId)
@@ -188,7 +188,7 @@ public class Matings {
                 "CORRECTION_REASON_REQUIRED",
                 "A correction reason is required");
           if (request.proposedSemenBatchId() != null)
-            semen.lockLineage(c.tenantId(), request.proposedSemenBatchId());
+            semen.requireLineage(c.tenantId(), request.proposedSemenBatchId());
           var id = ids.next();
           var now = now();
           store.requestCorrection(

@@ -15,7 +15,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/embryo-evaluations")
+@RequestMapping("/api/v1")
 public class EmbryoEvaluationController {
   private final TenantAccess access;
   private final EmbryoEvaluations evaluations;
@@ -25,7 +25,7 @@ public class EmbryoEvaluationController {
     this.evaluations = evaluations;
   }
 
-  @PostMapping(":bulk")
+  @PostMapping("/embryo-evaluations:bulk")
   public EvaluationBatch.Result record(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,

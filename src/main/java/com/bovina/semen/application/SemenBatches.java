@@ -79,7 +79,7 @@ public class SemenBatches {
         input,
         SemenBatch.class,
         () -> {
-          var producer = producer(c.tenantId(), input.producerEstablishmentId(), true);
+          var producer = producer(c.tenantId(), input.producerEstablishmentId());
           producer.requireActive();
           sires.snapshot(c.tenantId(), input.sireId());
           if (input.ownerId() != null) parties.requireActive(c.tenantId(), input.ownerId());
@@ -120,7 +120,7 @@ public class SemenBatches {
   @Transactional(readOnly = true)
   public SemenBatch get(ExecutionContext c, UUID id) {
     access.require(c, "semen:read");
-    return store.batch(c.tenantId(), id, false).orElseThrow(() -> missing("SEMEN_BATCH"));
+    return store.batch(c.tenantId(), id).orElseThrow(() -> missing("SEMEN_BATCH"));
   }
 
   @Transactional(readOnly = true)
@@ -133,7 +133,7 @@ public class SemenBatches {
   @Transactional(readOnly = true)
   public ExternalEstablishmentReference getProducer(ExecutionContext c, UUID id) {
     access.require(c, "semen:read");
-    return producer(c.tenantId(), id, false);
+    return producer(c.tenantId(), id);
   }
 
   @Transactional(readOnly = true)
@@ -144,16 +144,16 @@ public class SemenBatches {
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
-  public SemenLineage lockLineage(UUID tenant, UUID id) {
-    var batch = store.batch(tenant, id, true).orElseThrow(() -> missing("SEMEN_BATCH"));
+  public SemenLineage requireLineage(UUID tenant, UUID id) {
+    var batch = store.batch(tenant, id).orElseThrow(() -> missing("SEMEN_BATCH"));
     batch.requireActive();
-    var producer = producer(tenant, batch.producerEstablishmentId(), true);
+    var producer = producer(tenant, batch.producerEstablishmentId());
     producer.requireActive();
     return new SemenLineage(batch, sires.snapshot(tenant, batch.sireId()), producer);
   }
 
-  private ExternalEstablishmentReference producer(UUID tenant, UUID id, boolean lock) {
-    return store.external(tenant, id, lock).orElseThrow(() -> missing("EXTERNAL_ESTABLISHMENT"));
+  private ExternalEstablishmentReference producer(UUID tenant, UUID id) {
+    return store.external(tenant, id).orElseThrow(() -> missing("EXTERNAL_ESTABLISHMENT"));
   }
 
   private void record(ExecutionContext c, String type, UUID id) {

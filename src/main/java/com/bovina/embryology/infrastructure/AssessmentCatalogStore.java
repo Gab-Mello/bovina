@@ -63,12 +63,11 @@ public class AssessmentCatalogStore {
         });
   }
 
-  public Optional<Version> version(UUID tenant, UUID id, boolean lock) {
+  public Optional<Version> version(UUID tenant, UUID id) {
     var head =
         jdbc
             .query(
-                "SELECT id,scheme_id,version_label,effective_from,status,published_by,published_at FROM assessment_scheme_version WHERE organization_id=? AND id=?"
-                    + (lock ? " FOR SHARE" : ""),
+                "SELECT id,scheme_id,version_label,effective_from,status,published_by,published_at FROM assessment_scheme_version WHERE organization_id=? AND id=?",
                 (rs, n) ->
                     new Object[] {
                       rs.getObject(1, UUID.class),

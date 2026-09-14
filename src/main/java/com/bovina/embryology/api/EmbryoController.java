@@ -16,7 +16,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/embryos")
+@RequestMapping("/api/v1")
 public class EmbryoController {
   private final TenantAccess access;
   private final Embryos embryos;
@@ -28,7 +28,7 @@ public class EmbryoController {
     this.evaluations = evaluations;
   }
 
-  @PostMapping(":bulk")
+  @PostMapping("/embryos:bulk")
   public EmbryoBatch.Result identify(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
@@ -38,7 +38,7 @@ public class EmbryoController {
     return embryos.identify(context(jwt, tenant, request), key, input.value());
   }
 
-  @GetMapping("/{id}")
+  @GetMapping("/embryos/{id}")
   public Embryos.View get(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
@@ -47,7 +47,7 @@ public class EmbryoController {
     return embryos.get(context(jwt, tenant, request), id);
   }
 
-  @GetMapping
+  @GetMapping("/embryos")
   public PageResult<Embryos.View> search(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
@@ -58,7 +58,7 @@ public class EmbryoController {
     return embryos.search(context(jwt, tenant, request), matingId, new SearchPage("", page, size));
   }
 
-  @PostMapping("/{id}:reserve")
+  @PostMapping("/embryos/{id}:reserve")
   public Embryos.View reserve(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
@@ -75,7 +75,7 @@ public class EmbryoController {
         null);
   }
 
-  @PostMapping("/{id}:release-reservation")
+  @PostMapping("/embryos/{id}:release-reservation")
   public Embryos.View release(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
@@ -92,7 +92,7 @@ public class EmbryoController {
         null);
   }
 
-  @PostMapping("/{id}:discard")
+  @PostMapping("/embryos/{id}:discard")
   public Embryos.View discard(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
@@ -109,7 +109,7 @@ public class EmbryoController {
         body.reason());
   }
 
-  @PostMapping("/{id}/holds")
+  @PostMapping("/embryos/{id}/holds")
   public EmbryologyFacts.Hold hold(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
@@ -124,7 +124,7 @@ public class EmbryoController {
         new Embryos.OpenHold(body.id(), body.type(), body.reason()));
   }
 
-  @PostMapping("/{id}/holds/{holdId}:release")
+  @PostMapping("/embryos/{id}/holds/{holdId}:release")
   public EmbryologyFacts.Hold releaseHold(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
@@ -136,7 +136,7 @@ public class EmbryoController {
     return embryos.releaseHold(context(jwt, tenant, request), key, id, holdId, body.reason());
   }
 
-  @GetMapping("/{id}/evaluations")
+  @GetMapping("/embryos/{id}/evaluations")
   public List<EmbryoEvaluation> history(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,

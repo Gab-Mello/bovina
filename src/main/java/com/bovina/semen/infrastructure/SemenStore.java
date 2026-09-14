@@ -80,11 +80,10 @@ public class SemenStore {
         Timestamp.from(now));
   }
 
-  public Optional<ExternalEstablishmentReference> external(UUID tenant, UUID id, boolean lock) {
+  public Optional<ExternalEstablishmentReference> external(UUID tenant, UUID id) {
     return jdbc
         .query(
-            "SELECT * FROM external_establishment_reference WHERE organization_id=? AND id=?"
-                + (lock ? " FOR SHARE" : ""),
+            "SELECT * FROM external_establishment_reference WHERE organization_id=? AND id=?",
             EXTERNAL,
             tenant,
             id)
@@ -127,14 +126,9 @@ public class SemenStore {
         Timestamp.from(p.recordedAt()));
   }
 
-  public Optional<SemenBatch> batch(UUID tenant, UUID id, boolean lock) {
+  public Optional<SemenBatch> batch(UUID tenant, UUID id) {
     return jdbc
-        .query(
-            "SELECT * FROM semen_batch WHERE organization_id=? AND id=?"
-                + (lock ? " FOR SHARE" : ""),
-            BATCH,
-            tenant,
-            id)
+        .query("SELECT * FROM semen_batch WHERE organization_id=? AND id=?", BATCH, tenant, id)
         .stream()
         .findFirst();
   }

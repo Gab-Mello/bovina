@@ -105,7 +105,7 @@ public class AssessmentSchemes {
 
   @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
   public Version requirePublished(UUID tenant, UUID id) {
-    var version = store.version(tenant, id, true).orElseThrow(AssessmentSchemes::missing);
+    var version = store.version(tenant, id).orElseThrow(AssessmentSchemes::missing);
     if (!version.status().equals("PUBLISHED"))
       throw new ApplicationFailure(
           ApplicationFailure.Kind.CONFLICT,
@@ -125,7 +125,7 @@ public class AssessmentSchemes {
   }
 
   private Version requireVersion(UUID tenant, UUID id) {
-    return store.version(tenant, id, false).orElseThrow(AssessmentSchemes::missing);
+    return store.version(tenant, id).orElseThrow(AssessmentSchemes::missing);
   }
 
   private void record(ExecutionContext c, String type, UUID id) {
