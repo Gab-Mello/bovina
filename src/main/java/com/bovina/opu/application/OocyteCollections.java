@@ -142,11 +142,18 @@ public class OocyteCollections {
       long version,
       DataProvenance provenance) {}
 
-  public record Correction(
-      long expectedVersion, OocyteCounts counts, String notes, String reason) {
+  public record Correction(long expectedVersion, OocyteCounts counts, String notes, String reason) {
     public Correction {
-      if (expectedVersion < 0 || counts == null || reason == null || reason.isBlank() || reason.length()>500 || (notes!=null && notes.length()>2000))
-        throw new ApplicationFailure(ApplicationFailure.Kind.REJECTED,"INVALID_COLLECTION_CORRECTION","Version, counts and correction reason are required");
+      if (expectedVersion < 0
+          || counts == null
+          || reason == null
+          || reason.isBlank()
+          || reason.length() > 500
+          || (notes != null && notes.length() > 2000))
+        throw new ApplicationFailure(
+            ApplicationFailure.Kind.REJECTED,
+            "INVALID_COLLECTION_CORRECTION",
+            "Version, counts and correction reason are required");
     }
   }
 

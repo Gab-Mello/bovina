@@ -3,8 +3,11 @@ package com.bovina.opu.api;
 import com.bovina.animals.application.DonorDirectory.Donor;
 import com.bovina.identity.application.*;
 import com.bovina.opu.application.OocyteCollections;
+import com.bovina.opu.domain.OocyteCounts;
 import com.bovina.platform.application.*;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
 import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -46,9 +49,31 @@ public class OocyteCollectionController {
       HttpServletRequest request,
       @PathVariable UUID id,
       @RequestHeader("Idempotency-Key") UUID key,
-      @RequestBody OocyteCollections.Correction input) {
-    return collections.correct(context(jwt, tenant, request), key, id, input);
+      @Valid @RequestBody CorrectionRequest input) {
+    return collections.correct(
+        context(jwt, tenant, request),
+        key,
+        id,
+        new OocyteCollections.Correction(
+            input.expectedVersion(),
+            new OocyteCounts(
+                input.counts().totalRecovered(),
+                input.counts().viable(),
+                input.counts().folliclesAspirated()),
+            input.notes(),
+            input.reason()));
   }
+
+  public record Counts(
+      @NotNull @PositiveOrZero Integer totalRecovered,
+      @NotNull @PositiveOrZero Integer viable,
+      @PositiveOrZero Integer folliclesAspirated) {}
+
+  public record CorrectionRequest(
+      @NotNull @PositiveOrZero Long expectedVersion,
+      @NotNull @Valid Counts counts,
+      @Size(max = 2000) String notes,
+      @NotBlank @Size(max = 500) String reason) {}
 
   private ExecutionContext context(Jwt jwt, UUID tenant, HttpServletRequest request) {
     return access.resolve(

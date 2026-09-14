@@ -178,6 +178,7 @@ public class OpuSession {
         throw new ApplicationFailure(
             ApplicationFailure.Kind.REJECTED, "INVALID_TIMEZONE", "Use an IANA timezone");
       }
+      performedAt = performedAt.truncatedTo(java.time.temporal.ChronoUnit.MICROS);
     }
   }
 }

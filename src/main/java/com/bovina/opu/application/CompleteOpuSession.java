@@ -91,7 +91,10 @@ public class CompleteOpuSession {
                                 "COMPLETED"))
                     .toList());
           }
-          session.complete(expected, c.actorId(), clock.instant());
+          session.complete(
+              expected,
+              c.actorId(),
+              clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS));
           sessions.flush();
           audit.record(
               new AuditEvent(

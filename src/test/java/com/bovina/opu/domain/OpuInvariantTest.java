@@ -23,6 +23,27 @@ class OpuInvariantTest {
   }
 
   @Test
+  void observationTimesUsePostgresMicrosecondPrecision() {
+    var time = Instant.parse("2026-09-14T10:00:00.123456789Z");
+    var session =
+        new OpuSession.Registration(
+            ids.next(),
+            ids.next(),
+            null,
+            ids.next(),
+            null,
+            ids.next(),
+            time,
+            "America/Sao_Paulo",
+            null);
+    var collection =
+        new OocyteCollection.Registration(
+            ids.next(), ids.next(), time, new OocyteCounts(1, 1, null), null);
+    assertThat(session.performedAt()).isEqualTo(Instant.parse("2026-09-14T10:00:00.123456Z"));
+    assertThat(collection.collectedAt()).isEqualTo(session.performedAt());
+  }
+
+  @Test
   void availabilityUsesAllocationFactsAndRejectsOverAllocation() {
     var counts = new OocyteCounts(10, 8, null);
     assertThat(counts.availableAfter(3)).isEqualTo(5);

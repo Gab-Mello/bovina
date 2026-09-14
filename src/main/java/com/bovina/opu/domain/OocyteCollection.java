@@ -156,6 +156,7 @@ public class OocyteCollection {
             ApplicationFailure.Kind.REJECTED,
             "INVALID_COLLECTION",
             "Donor, collection time and counts are required");
+      collectedAt = collectedAt.truncatedTo(java.time.temporal.ChronoUnit.MICROS);
     }
   }
 }
