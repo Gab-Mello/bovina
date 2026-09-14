@@ -68,6 +68,25 @@ public class FarmProperties {
   }
 
   @Transactional(readOnly = true)
+  public FarmOrigin origin(ExecutionContext context, UUID id, boolean requireActive) {
+    access.require(context, "master-data:read");
+    var property = find(context, id);
+    if (requireActive && !property.status().equals("ACTIVE"))
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT, "PROPERTY_ARCHIVED", "Property is archived");
+    var d = property.details();
+    return new FarmOrigin(
+        id,
+        d.name(),
+        d.address(),
+        d.municipalityCode(),
+        d.internalCode(),
+        d.ownerId(),
+        d.operatorId(),
+        property.version());
+  }
+
+  @Transactional(readOnly = true)
   public PageResult<View> search(ExecutionContext context, SearchPage page) {
     access.require(context, "master-data:read");
     return new PageResult<>(

@@ -10,9 +10,18 @@ public enum MembershipRole {
           "membership:manage",
           "master-data:read",
           "master-data:write",
-          "protocol:manage")),
-  OPERATOR(Set.of("client:read", "client:create", "master-data:read", "master-data:write")),
-  READ_ONLY(Set.of("client:read", "master-data:read"));
+          "protocol:manage",
+          "opu:read",
+          "opu:write")),
+  OPERATOR(
+      Set.of(
+          "client:read",
+          "client:create",
+          "master-data:read",
+          "master-data:write",
+          "opu:read",
+          "opu:write")),
+  READ_ONLY(Set.of("client:read", "master-data:read", "opu:read"));
 
   private final Set<String> permissions;
 

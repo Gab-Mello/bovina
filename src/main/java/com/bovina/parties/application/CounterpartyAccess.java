@@ -39,4 +39,14 @@ public class CounterpartyAccess {
           "ANIMAL_OWNER_REQUIRED",
           "Register this counterparty as an animal owner first");
   }
+
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void requireClient(UUID tenant, UUID id) {
+    requireActive(tenant, id);
+    if (!queries.hasRole(tenant, id, CounterpartyRole.CLIENT))
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.REJECTED,
+          "CLIENT_REQUIRED",
+          "Register this counterparty as a client first");
+  }
 }
