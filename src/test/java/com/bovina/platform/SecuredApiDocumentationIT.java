@@ -1,4 +1,4 @@
-package com.bovina;
+package com.bovina.platform;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,7 +20,7 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {"springdoc.api-docs.enabled=true", "springdoc.swagger-ui.enabled=true"})
-class SecurityAndOpenApiIT {
+class SecuredApiDocumentationIT {
   private static final TrustedTokens TOKENS = new TrustedTokens();
   @LocalServerPort int port;
 
@@ -37,7 +37,7 @@ class SecurityAndOpenApiIT {
   }
 
   @Test
-  void acceptsSignedTokenAndDocumentsClientWithoutExposingInternalParty() throws Exception {
+  void validAuthenticationRevealsTheClientContractWithoutInternalPartyResources() throws Exception {
     var response =
         get(
             "/v3/api-docs",

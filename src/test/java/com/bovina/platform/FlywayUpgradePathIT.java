@@ -1,4 +1,4 @@
-package com.bovina;
+package com.bovina.platform;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -9,10 +9,10 @@ import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 
-class MasterDataMigrationIT {
+class FlywayUpgradePathIT {
   @Test
-  void upgradesTheApprovedIdentitySchemaWithoutRewritingExistingClientFacts() throws Exception {
-    var schema = "phase2_upgrade_" + UUID.randomUUID().toString().replace("-", "");
+  void forwardMigrationsPreserveExistingClientFacts() throws Exception {
+    var schema = "flyway_upgrade_" + UUID.randomUUID().toString().replace("-", "");
     var postgres = TestDatabase.POSTGRES;
     try (var connection =
             DriverManager.getConnection(

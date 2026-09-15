@@ -1,4 +1,4 @@
-package com.bovina;
+package com.bovina.platform;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -24,7 +24,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("prod")
-class FrameworkBaselineIT {
+class ApplicationRuntimeIT {
   @LocalServerPort int port;
   @Autowired EntityManagerFactory entityManagerFactory;
   @Autowired Flyway flyway;

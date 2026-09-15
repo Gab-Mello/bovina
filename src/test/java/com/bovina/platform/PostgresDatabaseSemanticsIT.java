@@ -1,4 +1,4 @@
-package com.bovina;
+package com.bovina.platform;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,7 +22,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-class DatabaseSemanticsIT {
+class PostgresDatabaseSemanticsIT {
   private static SessionFactory sessions;
   private static Flyway flyway;
 
