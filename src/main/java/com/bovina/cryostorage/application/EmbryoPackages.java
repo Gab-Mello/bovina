@@ -12,12 +12,16 @@ import com.bovina.operations.application.OpuFacilities;
 import com.bovina.platform.application.ApplicationFailure;
 import com.bovina.platform.application.CommandReceipts;
 import com.bovina.platform.application.ExecutionContext;
+import com.bovina.platform.application.PageResult;
+import com.bovina.platform.application.SearchPage;
 import com.bovina.platform.application.StableIds;
 import java.time.Clock;
 import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -159,6 +163,20 @@ public class EmbryoPackages {
     access.require(c, "inventory:read");
     return view(
         packages.findByOrganizationIdAndId(c.tenantId(), id).orElseThrow(EmbryoPackages::missing));
+  }
+
+  @Transactional(readOnly = true)
+  public PageResult<View> page(ExecutionContext c, SearchPage page) {
+    access.require(c, "inventory:read");
+    return new PageResult<>(
+        packages
+            .findByOrganizationId(
+                c.tenantId(), PageRequest.of(page.page(), page.size(), Sort.by("id")))
+            .stream()
+            .map(EmbryoPackages::view)
+            .toList(),
+        page.page(),
+        page.size());
   }
 
   @Transactional(readOnly = true)

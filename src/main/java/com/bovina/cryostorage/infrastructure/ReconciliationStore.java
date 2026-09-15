@@ -1,6 +1,7 @@
 package com.bovina.cryostorage.infrastructure;
 
 import com.bovina.platform.application.ExecutionContext;
+import com.bovina.platform.application.SearchPage;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -10,6 +11,19 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public class ReconciliationStore {
+  private static final String DIFFERENCES_SQL =
+      """
+      SELECT coalesce(e.package_id,o.package_id),e.expected_location_id,o.observed_location_id,
+             e.expected_sequence,o.raw_identifier
+      FROM reconciliation_expected e
+      FULL JOIN reconciliation_observation o
+        ON o.organization_id=e.organization_id
+       AND o.reconciliation_id=e.reconciliation_id AND o.package_id=e.package_id
+      WHERE coalesce(e.organization_id,o.organization_id)=?
+        AND coalesce(e.reconciliation_id,o.reconciliation_id)=?
+        AND (e.package_id IS NULL OR o.id IS NULL
+             OR e.expected_location_id IS DISTINCT FROM o.observed_location_id)
+      """;
   private final JdbcTemplate jdbc;
 
   public ReconciliationStore(JdbcTemplate jdbc) {
@@ -92,21 +106,10 @@ public class ReconciliationStore {
         != 1) throw new IllegalStateException("Reconciliation changed while lock was held");
   }
 
-  public List<Discrepancy> differences(UUID tenant, UUID id) {
+  public List<Discrepancy> differences(UUID tenant, UUID id, SearchPage page) {
     return jdbc.query(
-        """
-        SELECT coalesce(e.package_id,o.package_id),e.expected_location_id,o.observed_location_id,
-               e.expected_sequence,o.raw_identifier
-        FROM reconciliation_expected e
-        FULL JOIN reconciliation_observation o
-          ON o.organization_id=e.organization_id
-         AND o.reconciliation_id=e.reconciliation_id AND o.package_id=e.package_id
-        WHERE coalesce(e.organization_id,o.organization_id)=?
-          AND coalesce(e.reconciliation_id,o.reconciliation_id)=?
-          AND (e.package_id IS NULL OR o.id IS NULL
-               OR e.expected_location_id IS DISTINCT FROM o.observed_location_id)
-        ORDER BY coalesce(e.package_id,o.package_id),o.raw_identifier
-        """,
+        DIFFERENCES_SQL
+            + " ORDER BY coalesce(e.package_id,o.package_id),o.raw_identifier,o.id LIMIT ? OFFSET ?",
         (rs, row) ->
             new Discrepancy(
                 rs.getObject(1, UUID.class),
@@ -115,11 +118,19 @@ public class ReconciliationStore {
                 rs.getObject(4) == null ? null : rs.getLong(4),
                 rs.getString(5)),
         tenant,
-        id);
+        id,
+        page.size(),
+        page.offset());
   }
 
   public boolean hasDifference(UUID tenant, UUID id, UUID packageId) {
-    return differences(tenant, id).stream().anyMatch(d -> packageId.equals(d.packageId()));
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "SELECT EXISTS (" + DIFFERENCES_SQL + " AND coalesce(e.package_id,o.package_id)=?)",
+            Boolean.class,
+            tenant,
+            id,
+            packageId));
   }
 
   public record Session(

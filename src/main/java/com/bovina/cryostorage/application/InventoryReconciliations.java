@@ -12,6 +12,8 @@ import com.bovina.operations.application.OpuFacilities;
 import com.bovina.platform.application.ApplicationFailure;
 import com.bovina.platform.application.CommandReceipts;
 import com.bovina.platform.application.ExecutionContext;
+import com.bovina.platform.application.PageResult;
+import com.bovina.platform.application.SearchPage;
 import com.bovina.platform.application.StableIds;
 import java.time.Clock;
 import java.time.temporal.ChronoUnit;
@@ -58,7 +60,10 @@ public class InventoryReconciliations {
   public Session open(ExecutionContext c, UUID key, Open input) {
     access.require(c, "inventory:write");
     StableIds.requireVersion7(input.id());
-    if (!key.equals(input.id()) || !List.of("SCAN", "MANUAL", "MIXED").contains(input.method()))
+    if (!key.equals(input.id())
+        || input.method() == null
+        || !List.of("SCAN", "MANUAL", "MIXED").contains(input.method())
+        || input.notes() != null && input.notes().length() > 1000)
       throw rejected("INVALID_RECONCILIATION_SESSION");
     return receipts.replayOrExecute(
         c,
@@ -189,10 +194,10 @@ public class InventoryReconciliations {
   }
 
   @Transactional(readOnly = true)
-  public List<Discrepancy> differences(ExecutionContext c, UUID id) {
+  public PageResult<Discrepancy> differences(ExecutionContext c, UUID id, SearchPage page) {
     access.require(c, "inventory:read");
     find(c, id, false);
-    return store.differences(c.tenantId(), id);
+    return new PageResult<>(store.differences(c.tenantId(), id, page), page.page(), page.size());
   }
 
   private Session find(ExecutionContext c, UUID id, boolean lock) {

@@ -3,6 +3,8 @@ package com.bovina.cryostorage.api;
 import com.bovina.cryostorage.application.EmbryoPackages;
 import com.bovina.cryostorage.domain.EmbryoPackage;
 import com.bovina.cryostorage.infrastructure.CryostorageFacts.PackageMember;
+import com.bovina.platform.application.PageResult;
+import com.bovina.platform.application.SearchPage;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.UUID;
@@ -62,6 +64,16 @@ public class EmbryoPackageController {
       HttpServletRequest request,
       @PathVariable UUID id) {
     return packages.get(context.resolve(jwt, tenant, request), id);
+  }
+
+  @GetMapping
+  public PageResult<EmbryoPackages.View> page(
+      @AuthenticationPrincipal Jwt jwt,
+      @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
+      HttpServletRequest request,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size) {
+    return packages.page(context.resolve(jwt, tenant, request), new SearchPage(null, page, size));
   }
 
   @GetMapping("/{id}/items")

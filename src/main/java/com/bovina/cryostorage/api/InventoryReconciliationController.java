@@ -4,8 +4,9 @@ import com.bovina.cryostorage.application.InventoryMovements;
 import com.bovina.cryostorage.application.InventoryReconciliations;
 import com.bovina.cryostorage.infrastructure.ReconciliationStore.Discrepancy;
 import com.bovina.cryostorage.infrastructure.ReconciliationStore.Session;
+import com.bovina.platform.application.PageResult;
+import com.bovina.platform.application.SearchPage;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -59,12 +60,15 @@ public class InventoryReconciliationController {
   }
 
   @GetMapping("/{id}/discrepancies")
-  public List<Discrepancy> differences(
+  public PageResult<Discrepancy> differences(
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
       HttpServletRequest request,
-      @PathVariable UUID id) {
-    return reconciliations.differences(context.resolve(jwt, tenant, request), id);
+      @PathVariable UUID id,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "50") int size) {
+    return reconciliations.differences(
+        context.resolve(jwt, tenant, request), id, new SearchPage(null, page, size));
   }
 
   @PostMapping("/{id}:resolve")

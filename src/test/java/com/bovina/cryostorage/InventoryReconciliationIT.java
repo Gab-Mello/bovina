@@ -82,6 +82,15 @@ class InventoryReconciliationIT extends AuthenticatedIntegrationTest {
                         "observedLocationId",
                         b,
                         "observedAt",
+                        Instant.parse("2026-09-03T12:00:00Z")),
+                    Map.of(
+                        "id",
+                        id(),
+                        "rawIdentifier",
+                        "UNKNOWN_PACKAGE",
+                        "observedLocationId",
+                        b,
+                        "observedAt",
                         Instant.parse("2026-09-03T12:00:00Z"))))),
         200);
     assertStatus(
@@ -94,6 +103,18 @@ class InventoryReconciliationIT extends AuthenticatedIntegrationTest {
         api.get(tenant.id(), "/inventory-reconciliations/" + reconciliation + "/discrepancies");
     assertStatus(discrepancy, 200);
     assertThat(discrepancy.body()).contains(packageId.toString(), a.toString(), b.toString());
+    var firstPage =
+        api.get(
+            tenant.id(),
+            "/inventory-reconciliations/" + reconciliation + "/discrepancies?page=0&size=1");
+    var secondPage =
+        api.get(
+            tenant.id(),
+            "/inventory-reconciliations/" + reconciliation + "/discrepancies?page=1&size=1");
+    assertStatus(firstPage, 200);
+    assertStatus(secondPage, 200);
+    assertThat(firstPage.body()).contains(packageId.toString()).doesNotContain("UNKNOWN_PACKAGE");
+    assertThat(secondPage.body()).contains("UNKNOWN_PACKAGE").doesNotContain(packageId.toString());
     assertThat(
             jdbc.queryForObject(
                 "SELECT count(*) FROM inventory_movement WHERE organization_id=? AND package_id=?",
@@ -103,20 +124,29 @@ class InventoryReconciliationIT extends AuthenticatedIntegrationTest {
         .isEqualTo(1);
 
     var adjustment = id();
+    var resolution =
+        physicalMovement(
+            adjustment,
+            packageId,
+            "ADJUST",
+            a,
+            b,
+            3,
+            Instant.parse("2026-09-03T10:00:00Z"),
+            "Observed package at other rack during physical stocktake");
     assertStatus(
         api.post(
             tenant.id(),
             "/inventory-reconciliations/" + reconciliation + ":resolve",
             adjustment,
-            physicalMovement(
-                adjustment,
-                packageId,
-                "ADJUST",
-                a,
-                b,
-                3,
-                Instant.parse("2026-09-03T10:00:00Z"),
-                "Observed package at other rack during physical stocktake")),
+            resolution),
+        200);
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/inventory-reconciliations/" + reconciliation + ":resolve",
+            adjustment,
+            resolution),
         200);
     assertThat(
             jdbc.queryForObject(
