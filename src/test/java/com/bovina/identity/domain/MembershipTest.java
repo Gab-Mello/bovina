@@ -29,12 +29,14 @@ class MembershipTest {
             "semen:read",
             "fertilization:read",
             "embryology:read",
-            "transfer:read");
+            "transfer:read",
+            "inventory:read");
     assertThat(MembershipRole.READ_ONLY.permissions()).doesNotContain("opu:write");
     assertThat(MembershipRole.OPERATOR.permissions()).doesNotContain("membership:manage");
     assertThat(MembershipRole.OPERATOR.permissions()).doesNotContain("protocol:manage");
     assertThat(MembershipRole.OPERATOR.permissions()).doesNotContain("lineage:correct");
     assertThat(MembershipRole.READ_ONLY.permissions()).doesNotContain("transfer:write");
+    assertThat(MembershipRole.READ_ONLY.permissions()).doesNotContain("inventory:write");
   }
 
   @Test
