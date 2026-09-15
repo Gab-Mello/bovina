@@ -89,6 +89,57 @@ public final class TestHttpClient {
     return IntegrationTestRuntime.HTTP.send(builder.build(), HttpResponse.BodyHandlers.ofString());
   }
 
+  public HttpResponse<String> putDocumentVersion(
+      UUID organizationId,
+      UUID documentId,
+      UUID versionId,
+      long expectedVersion,
+      String fileName,
+      String mimeType,
+      byte[] bytes)
+      throws Exception {
+    var request =
+        HttpRequest.newBuilder(
+                URI.create(
+                    "http://localhost:"
+                        + port
+                        + "/api/v1/documents/"
+                        + documentId
+                        + "/versions/"
+                        + versionId
+                        + "?expectedVersion="
+                        + expectedVersion))
+            .timeout(Duration.ofSeconds(30))
+            .header("Authorization", "Bearer " + token("integration-bootstrap"))
+            .header("X-Organization-ID", organizationId.toString())
+            .header("Idempotency-Key", versionId.toString())
+            .header("X-File-Name", fileName)
+            .header("Content-Type", mimeType)
+            .PUT(HttpRequest.BodyPublishers.ofByteArray(bytes))
+            .build();
+    return IntegrationTestRuntime.HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+  }
+
+  public HttpResponse<byte[]> getDocumentContent(
+      UUID organizationId, UUID documentId, UUID versionId) throws Exception {
+    var request =
+        HttpRequest.newBuilder(
+                URI.create(
+                    "http://localhost:"
+                        + port
+                        + "/api/v1/documents/"
+                        + documentId
+                        + "/versions/"
+                        + versionId
+                        + "/content"))
+            .timeout(Duration.ofSeconds(30))
+            .header("Authorization", "Bearer " + token("integration-bootstrap"))
+            .header("X-Organization-ID", organizationId.toString())
+            .GET()
+            .build();
+    return IntegrationTestRuntime.HTTP.send(request, HttpResponse.BodyHandlers.ofByteArray());
+  }
+
   public HttpResponse<String> preflight(String path, String origin, String requestedMethod)
       throws Exception {
     var request =

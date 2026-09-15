@@ -25,6 +25,8 @@ class MembershipTest {
         .containsExactlyInAnyOrder(
             "client:read",
             "master-data:read",
+            "documents:read",
+            "compliance:read",
             "opu:read",
             "semen:read",
             "fertilization:read",
@@ -37,6 +39,8 @@ class MembershipTest {
     assertThat(MembershipRole.OPERATOR.permissions()).doesNotContain("lineage:correct");
     assertThat(MembershipRole.READ_ONLY.permissions()).doesNotContain("transfer:write");
     assertThat(MembershipRole.READ_ONLY.permissions()).doesNotContain("inventory:write");
+    assertThat(MembershipRole.READ_ONLY.permissions())
+        .doesNotContain("documents:write", "compliance:manage");
   }
 
   @Test
