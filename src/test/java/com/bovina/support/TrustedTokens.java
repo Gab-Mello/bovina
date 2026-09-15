@@ -21,7 +21,7 @@ public final class TrustedTokens implements AutoCloseable {
 
   public TrustedTokens() {
     try {
-      key = new RSAKeyGenerator(2048).keyID("phase0-test").generate();
+      key = new RSAKeyGenerator(2048).keyID("integration-test").generate();
       server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
       server.createContext(
           "/jwks",
