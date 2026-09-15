@@ -39,7 +39,7 @@ public class ClientImportStore {
     return jdbc.update(
             """
         INSERT INTO import_batch(id,organization_id,kind,mode,request_hash,source_document_id,recorded_by,recorded_at)
-        VALUES (?,?,'CLIENT_MASTER_DATA',?,?,?,?,?) ON CONFLICT (id) DO NOTHING
+        VALUES (?,?,'CLIENT_MASTER_DATA',?,?,?,?,?) ON CONFLICT DO NOTHING
         """,
             b.batchId(),
             c.tenantId(),
