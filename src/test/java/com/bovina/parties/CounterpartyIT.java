@@ -231,6 +231,46 @@ class CounterpartyIT extends AuthenticatedIntegrationTest {
   }
 
   @Test
+  void batchIdCollisionAcrossTenantsConflictsWithoutExposingTheExistingImport() throws Exception {
+    var original = tenant("Original Import Lab");
+    var foreign = tenant("Foreign Import Lab");
+    var batchId = id();
+    var originalClient = id();
+    var foreignClient = id();
+    var originalCommand =
+        importBatch(batchId, "ATOMIC", List.of(importRow(originalClient, "Original client")));
+    var foreignCommand =
+        importBatch(batchId, "ATOMIC", List.of(importRow(foreignClient, "Foreign client")));
+
+    assertStatus(api.post(original.id(), "/clients/imports", batchId, originalCommand), 200);
+    var collision = api.post(foreign.id(), "/clients/imports", batchId, foreignCommand);
+    assertStatus(collision, 409);
+    assertThat(json.readTree(collision.body()).path("code").asString())
+        .isEqualTo("IDEMPOTENCY_KEY_REUSED");
+    assertThat(collision.body()).doesNotContain("Original client", original.id().toString());
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM import_batch WHERE id=?", Integer.class, batchId))
+        .isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM party WHERE id=?", Integer.class, foreignClient))
+        .isZero();
+    assertStatus(api.post(original.id(), "/clients/imports", batchId, originalCommand), 200);
+    var independentBatch = id();
+    assertStatus(
+        api.post(
+            foreign.id(),
+            "/clients/imports",
+            independentBatch,
+            importBatch(
+                independentBatch,
+                "ATOMIC",
+                List.of(importRow(foreignClient, "Independent client")))),
+        200);
+  }
+
+  @Test
   void interruptedPartialImportResumesOnlyUncommittedItems() throws Exception {
     var tenant = tenant("Resumable Import Lab");
     var firstClient = id();

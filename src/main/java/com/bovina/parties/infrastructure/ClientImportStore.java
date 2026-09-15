@@ -39,7 +39,7 @@ public class ClientImportStore {
     return jdbc.update(
             """
         INSERT INTO import_batch(id,organization_id,kind,mode,request_hash,source_document_id,recorded_by,recorded_at)
-        VALUES (?,?,'CLIENT_MASTER_DATA',?,?,?,?,?) ON CONFLICT DO NOTHING
+        VALUES (?,?,'CLIENT_MASTER_DATA',?,?,?,?,?) ON CONFLICT (id) DO NOTHING
         """,
             b.batchId(),
             c.tenantId(),
@@ -51,12 +51,15 @@ public class ClientImportStore {
         == 1;
   }
 
-  public String storedHash(UUID tenant, UUID id) {
-    return jdbc.queryForObject(
-        "SELECT request_hash FROM import_batch WHERE organization_id=? AND id=?",
-        String.class,
-        tenant,
-        id);
+  public Optional<String> storedHash(UUID tenant, UUID id) {
+    return jdbc
+        .query(
+            "SELECT request_hash FROM import_batch WHERE organization_id=? AND id=?",
+            (rs, row) -> rs.getString(1),
+            tenant,
+            id)
+        .stream()
+        .findFirst();
   }
 
   public void lock(UUID tenant, UUID id) {

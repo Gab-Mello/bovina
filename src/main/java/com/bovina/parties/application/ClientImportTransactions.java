@@ -58,7 +58,7 @@ public class ClientImportTransactions {
               null,
               null,
               batch.mode().name()));
-    if (!hash.equals(store.storedHash(c.tenantId(), batch.batchId())))
+    if (store.storedHash(c.tenantId(), batch.batchId()).filter(hash::equals).isEmpty())
       throw new ApplicationFailure(
           ApplicationFailure.Kind.CONFLICT,
           "IDEMPOTENCY_KEY_REUSED",
@@ -190,7 +190,8 @@ public class ClientImportTransactions {
 
   private void lockIntent(ExecutionContext c, ClientImportBatch batch) {
     store.lock(c.tenantId(), batch.batchId());
-    if (!store.fingerprint(c, batch).equals(store.storedHash(c.tenantId(), batch.batchId())))
+    var hash = store.fingerprint(c, batch);
+    if (store.storedHash(c.tenantId(), batch.batchId()).filter(hash::equals).isEmpty())
       throw new ApplicationFailure(
           ApplicationFailure.Kind.CONFLICT,
           "IDEMPOTENCY_KEY_REUSED",
