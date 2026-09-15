@@ -69,8 +69,8 @@ public class TransferStore {
         INSERT INTO embryo_transfer(id,organization_id,reservation_id,embryo_id,recipient_cycle_id,
           performed_at,performed_timezone,transfer_origin,operator_professional_id,notes,
           origin_type,source_document_id,import_batch_id,api_client_id,recorded_by,recorded_at,
-          confirmed_by,confirmed_at,derivation_reference)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          confirmed_by,confirmed_at,derivation_reference,thaw_event_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         transfers,
         100,
@@ -125,6 +125,7 @@ public class TransferStore {
               rs.getTimestamp("performed_at").toInstant(),
               rs.getString("performed_timezone"),
               EmbryoTransfer.Origin.valueOf(rs.getString("transfer_origin")),
+              rs.getObject("thaw_event_id", UUID.class),
               rs.getObject("operator_professional_id", UUID.class),
               rs.getString("notes"),
               new DataProvenance(
@@ -160,6 +161,7 @@ public class TransferStore {
     ps.setObject(17, p.confirmedByUserId());
     ps.setTimestamp(18, p.confirmedAt() == null ? null : Timestamp.from(p.confirmedAt()));
     ps.setString(19, p.derivationReference());
+    ps.setObject(20, transfer.thawEventId());
   }
 
   private static Instant instant(java.sql.ResultSet rs, String column)
