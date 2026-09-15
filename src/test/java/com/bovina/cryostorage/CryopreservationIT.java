@@ -1,12 +1,14 @@
 package com.bovina.cryostorage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.bovina.support.fixture.CryostorageFixtures;
 import com.bovina.support.fixture.ProductionFixtures;
 import com.bovina.support.integration.AuthenticatedIntegrationTest;
 import java.util.HashMap;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessException;
 
 class CryopreservationIT extends AuthenticatedIntegrationTest {
   @Test
@@ -47,6 +49,13 @@ class CryopreservationIT extends AuthenticatedIntegrationTest {
                 tenant.id(),
                 cryo.cryoEvent()))
         .isEqualTo("MANUAL");
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "UPDATE cryopreservation_item SET result_code='REWRITTEN' WHERE organization_id=? AND id=?",
+                    tenant.id(),
+                    cryo.cryoItem()))
+        .isInstanceOf(DataAccessException.class);
 
     var changed = new HashMap<>(cryo.command());
     changed.put("methodCode", "OTHER_METHOD");

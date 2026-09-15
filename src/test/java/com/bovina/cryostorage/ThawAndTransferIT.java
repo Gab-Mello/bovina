@@ -3,6 +3,7 @@ package com.bovina.cryostorage;
 import static com.bovina.support.fixture.CryostorageFixtures.physicalMovement;
 import static com.bovina.support.fixture.CryostorageFixtures.storageLocation;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.bovina.support.fixture.CryostorageFixtures;
 import com.bovina.support.fixture.ProductionFixtures;
@@ -13,6 +14,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessException;
 
 class ThawAndTransferIT extends AuthenticatedIntegrationTest {
   @Test
@@ -97,6 +99,13 @@ class ThawAndTransferIT extends AuthenticatedIntegrationTest {
         .isEqualTo(1);
     assertThat(api.get(tenant.id(), "/embryos/" + cryo.embryoId()).body())
         .contains("\"preservation\":\"THAWED\"");
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "UPDATE thaw_event SET result_code='REWRITTEN' WHERE organization_id=? AND id=?",
+                    tenant.id(),
+                    thawId))
+        .isInstanceOf(DataAccessException.class);
 
     var transferId = id();
     var transfer =
