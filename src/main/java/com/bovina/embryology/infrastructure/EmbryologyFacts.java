@@ -188,6 +188,14 @@ public class EmbryologyFacts {
         .orElse(null);
   }
 
+  public String developmentStageCode(UUID tenant, UUID codeId) {
+    return jdbc.queryForObject(
+        "SELECT code FROM assessment_code WHERE organization_id=? AND id=? AND dimension='DEVELOPMENT_STAGE'",
+        String.class,
+        tenant,
+        codeId);
+  }
+
   public List<EmbryoEvaluation> history(UUID tenant, UUID embryo) {
     return jdbc.query(
         "SELECT * FROM embryo_evaluation WHERE organization_id=? AND embryo_id=? ORDER BY recorded_at,id",
