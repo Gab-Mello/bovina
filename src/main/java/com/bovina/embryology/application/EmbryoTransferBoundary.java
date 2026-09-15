@@ -12,10 +12,13 @@ import org.springframework.transaction.annotation.*;
 public class EmbryoTransferBoundary {
   private final EmbryoRepository embryos;
   private final EmbryologyFacts facts;
+  private final PreservationFacts preservation;
 
-  public EmbryoTransferBoundary(EmbryoRepository embryos, EmbryologyFacts facts) {
+  public EmbryoTransferBoundary(
+      EmbryoRepository embryos, EmbryologyFacts facts, PreservationFacts preservation) {
     this.embryos = embryos;
     this.facts = facts;
+    this.preservation = preservation;
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
@@ -33,6 +36,39 @@ public class EmbryoTransferBoundary {
     return mutate(tenant, requested, Action.PERFORM);
   }
 
+  @Transactional(propagation = Propagation.MANDATORY)
+  public State performThawed(
+      UUID tenant, Expected expected, UUID thawEventId, Instant performedAt) {
+    var thaw = preservation.thawEvidence(tenant, thawEventId, expected.embryoId());
+    if (thaw == null || performedAt.isBefore(thaw.occurredAt()))
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT,
+          "INVALID_THAW_EVIDENCE",
+          "Thawed transfer requires withdrawn item-level thaw evidence");
+    var embryo =
+        embryos.lock(tenant, expected.embryoId()).orElseThrow(EmbryoTransferBoundary::missing);
+    if (embryo.version() != expected.version())
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT, "STALE_EMBRYO_VERSION", "Embryo version has changed");
+    if (facts.hasActiveHold(tenant, embryo.id()))
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT, "EMBRYO_ON_HOLD", "Embryo has an active hold");
+    if (!preservation.cryopreservedEmbryos(tenant, List.of(embryo.id())).contains(embryo.id()))
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT,
+          "INVALID_THAW_EVIDENCE",
+          "Thawed transfer requires withdrawn package and item-level thaw");
+    embryo.reserve();
+    embryo.performTransfer();
+    embryos.flush();
+    return new State(
+        embryo.id(),
+        embryo.matingId(),
+        embryo.identifiedAt(),
+        embryo.availability().name(),
+        expected.version() + 1);
+  }
+
   private Map<UUID, State> mutate(UUID tenant, Collection<Expected> requested, Action action) {
     if (requested.isEmpty() || requested.size() > 100)
       throw rejected("INVALID_TRANSFER_BATCH_SIZE", "Transfer batch must contain 1 to 100 items");
@@ -44,6 +80,7 @@ public class EmbryoTransferBoundary {
     var locked = embryos.lockAll(tenant, orderedIds);
     if (locked.size() != orderedIds.size()) throw missing();
     var held = facts.embryosWithActiveHold(tenant, orderedIds);
+    var frozen = preservation.cryopreservedEmbryos(tenant, orderedIds);
     var result = new HashMap<UUID, State>();
     for (var embryo : locked) {
       long version = expected.get(embryo.id());
@@ -55,6 +92,11 @@ public class EmbryoTransferBoundary {
             ApplicationFailure.Kind.CONFLICT,
             "EMBRYO_ON_HOLD",
             "Release active holds before transferring the embryo");
+      if (frozen.contains(embryo.id()))
+        throw new ApplicationFailure(
+            ApplicationFailure.Kind.CONFLICT,
+            "CRYOPRESERVED_EMBRYO_REQUIRES_THAWED_PATH",
+            "A cryopreserved embryo cannot use the fresh transfer path");
       switch (action) {
         case RESERVE -> embryo.reserve();
         case RELEASE -> embryo.releaseReservation();

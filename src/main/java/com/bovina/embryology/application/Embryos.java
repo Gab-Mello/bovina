@@ -31,6 +31,7 @@ public class Embryos {
   private final AuditRecorder audit;
   private final StableIds ids;
   private final Clock clock;
+  private final PreservationFacts preservation;
 
   public Embryos(
       TenantAccess access,
@@ -43,7 +44,8 @@ public class Embryos {
       CommandReceiptStore hashes,
       AuditRecorder audit,
       StableIds ids,
-      Clock clock) {
+      Clock clock,
+      PreservationFacts preservation) {
     this.access = access;
     this.repository = repository;
     this.facts = facts;
@@ -55,6 +57,7 @@ public class Embryos {
     this.audit = audit;
     this.ids = ids;
     this.clock = clock;
+    this.preservation = preservation;
   }
 
   @Transactional
@@ -263,6 +266,7 @@ public class Embryos {
   }
 
   private View view(UUID tenant, Embryo e) {
+    var material = preservation.state(tenant, e.id());
     return new View(
         e.id(),
         e.matingId(),
@@ -270,9 +274,9 @@ public class Embryos {
         e.ownerId(),
         e.identifiedAt(),
         e.availability().name(),
-        "FRESH",
+        material.preservation(),
         facts.holds(tenant, e.id()),
-        null,
+        material.currentLocationId(),
         facts.currentEvaluation(tenant, e.id()),
         e.version(),
         e.provenance());
