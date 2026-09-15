@@ -1,4 +1,4 @@
-package com.bovina;
+package com.bovina.opu;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -11,7 +11,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.*;
 
 @SpringBootTest
-class OpuIntakeDisabledIT {
+class ConditionalIntakeConfigurationIT {
   @Autowired ApplicationContext context;
 
   @DynamicPropertySource
