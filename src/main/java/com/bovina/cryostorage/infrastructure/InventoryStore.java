@@ -98,6 +98,24 @@ public class InventoryStore {
         page * size);
   }
 
+  public MovementRow latestMovement(UUID tenant, UUID packageId) {
+    var rows =
+        jdbc.query(
+            "SELECT id,sequence,movement_type,from_location_id,to_location_id,occurred_at,reason FROM inventory_movement WHERE organization_id=? AND package_id=? ORDER BY sequence DESC LIMIT 1",
+            (rs, row) ->
+                new MovementRow(
+                    rs.getObject(1, UUID.class),
+                    rs.getLong(2),
+                    rs.getString(3),
+                    rs.getObject(4, UUID.class),
+                    rs.getObject(5, UUID.class),
+                    rs.getTimestamp(6).toInstant(),
+                    rs.getString(7)),
+            tenant,
+            packageId);
+    return rows.isEmpty() ? null : rows.getFirst();
+  }
+
   public void openHold(ExecutionContext c, Hold hold, Instant now) {
     jdbc.update(
         "INSERT INTO inventory_hold(id,organization_id,package_id,hold_type,reason,opened_at,opened_by) VALUES (?,?,?,?,?,?,?)",
@@ -153,9 +171,9 @@ public class InventoryStore {
         reason);
   }
 
-  public void insertThaw(ExecutionContext c, Thaw thaw, Instant now) {
+  public void insertThaw(ExecutionContext c, Thaw thaw, UUID withdrawalMovementId, Instant now) {
     jdbc.update(
-        "INSERT INTO thaw_event(id,organization_id,package_id,occurred_at,professional_id,result_code,notes,origin_type,recorded_by,recorded_at,protocol_version_id) VALUES (?,?,?,?,?,?,?,'MANUAL',?,?,?)",
+        "INSERT INTO thaw_event(id,organization_id,package_id,occurred_at,professional_id,result_code,notes,origin_type,recorded_by,recorded_at,protocol_version_id,withdrawal_movement_id) VALUES (?,?,?,?,?,?,?,'MANUAL',?,?,?,?)",
         thaw.id(),
         c.tenantId(),
         thaw.packageId(),
@@ -165,7 +183,8 @@ public class InventoryStore {
         thaw.notes(),
         c.actorId(),
         Timestamp.from(now),
-        thaw.protocolVersionId());
+        thaw.protocolVersionId(),
+        withdrawalMovementId);
   }
 
   public void thawMembers(
@@ -209,12 +228,10 @@ public class InventoryStore {
             """
         SELECT t.occurred_at FROM thaw_event_item i
         JOIN thaw_event t ON t.organization_id=i.organization_id AND t.id=i.thaw_event_id
-        JOIN embryo_package p ON p.organization_id=t.organization_id AND p.id=t.package_id
+        JOIN inventory_movement m ON m.organization_id=t.organization_id
+            AND m.id=t.withdrawal_movement_id AND m.package_id=t.package_id
         WHERE i.organization_id=? AND i.thaw_event_id=? AND i.embryo_id=?
-          AND p.current_location_id IS NULL
-          AND NOT EXISTS(SELECT 1 FROM inventory_hold h WHERE h.organization_id=p.organization_id
-              AND h.package_id=p.id AND h.released_at IS NULL)
-        FOR SHARE OF p
+          AND m.movement_type='WITHDRAW' AND m.to_location_id IS NULL
         """,
             (rs, row) -> rs.getTimestamp(1).toInstant(),
             tenant,

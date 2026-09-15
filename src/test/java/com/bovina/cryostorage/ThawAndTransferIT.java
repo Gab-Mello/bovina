@@ -138,4 +138,173 @@ class ThawAndTransferIT extends AuthenticatedIntegrationTest {
                 cryo.embryoId()))
         .isEqualTo(1);
   }
+
+  @Test
+  void thawedItemCanTransferAfterPackageWithOtherMembersReturnsToStorage() throws Exception {
+    var tenant = tenant("Multi-item Thaw Lab");
+    var production = ProductionFixtures.freshEmbryos(api, tenant, 2);
+    var ids = new com.bovina.platform.application.StableIds();
+    var first =
+        CryostorageFixtures.cryopreservedEmbryo(
+            api, tenant, production.embryos().get(0), production, ids);
+    var second =
+        CryostorageFixtures.cryopreservedEmbryo(
+            api, tenant, production.embryos().get(1), production, ids);
+    var packageId = id();
+    var firstPackageItem = id();
+    var secondPackageItem = id();
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/embryo-packages",
+            packageId,
+            Map.of(
+                "id",
+                packageId,
+                "establishmentId",
+                production.inputs().opu().establishment(),
+                "packageCode",
+                "MULTI-" + packageId,
+                "packagingType",
+                "CONTAINER",
+                "packagedAt",
+                Instant.parse("2026-09-04T08:00:00Z"))),
+        201);
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/embryo-packages/" + packageId + "/items:bulk",
+            Map.of(
+                "expectedVersion",
+                0,
+                "items",
+                List.of(
+                    Map.of("id", firstPackageItem, "cryopreservationItemId", first.cryoItem()),
+                    Map.of("id", secondPackageItem, "cryopreservationItemId", second.cryoItem())))),
+        200);
+    assertStatus(
+        api.post(
+            tenant.id(), "/embryo-packages/" + packageId + ":seal", Map.of("expectedVersion", 1)),
+        200);
+    var rack =
+        storageLocation(
+            api, tenant.id(), production.inputs().opu().establishment(), "MULTI_RACK", ids);
+    var receive = id();
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/inventory-movements",
+            receive,
+            physicalMovement(
+                receive,
+                packageId,
+                "RECEIVE",
+                null,
+                rack,
+                2,
+                Instant.parse("2026-09-04T09:00:00Z"),
+                null)),
+        201);
+    var withdrawal = id();
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/inventory-movements",
+            withdrawal,
+            physicalMovement(
+                withdrawal,
+                packageId,
+                "WITHDRAW",
+                rack,
+                null,
+                3,
+                Instant.parse("2026-09-04T10:00:00Z"),
+                null)),
+        201);
+    var thaw = id();
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/thaw-events",
+            thaw,
+            Map.of(
+                "id",
+                thaw,
+                "packageId",
+                packageId,
+                "occurredAt",
+                Instant.parse("2026-09-04T11:00:00Z"),
+                "professionalId",
+                production.professional(),
+                "resultCode",
+                "OBSERVED_VIABLE",
+                "packageItemIds",
+                List.of(firstPackageItem))),
+        201);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT withdrawal_movement_id FROM thaw_event WHERE organization_id=? AND id=?",
+                java.util.UUID.class,
+                tenant.id(),
+                thaw))
+        .isEqualTo(withdrawal);
+    var storeAgain = id();
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/inventory-movements",
+            storeAgain,
+            physicalMovement(
+                storeAgain,
+                packageId,
+                "STORE",
+                null,
+                rack,
+                5,
+                Instant.parse("2026-09-04T12:00:00Z"),
+                null)),
+        201);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT current_location_id FROM embryo_package WHERE organization_id=? AND id=?",
+                java.util.UUID.class,
+                tenant.id(),
+                packageId))
+        .isEqualTo(rack);
+    var recipient = ProductionFixtures.animal(api, tenant.id(), "FEMALE", "Recipient B");
+    var cycle = TransferFixtures.openCycle(api, tenant.id(), recipient, LocalDate.of(2026, 9, 1));
+    var transfer = id();
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/thawed-transfers:perform",
+            transfer,
+            Map.of(
+                "transferId",
+                transfer,
+                "reservationId",
+                id(),
+                "embryoId",
+                first.embryoId(),
+                "recipientCycleId",
+                cycle,
+                "thawEventId",
+                thaw,
+                "expectedEmbryoVersion",
+                0,
+                "performedAt",
+                Instant.parse("2026-09-04T13:00:00Z"),
+                "timezone",
+                "America/Sao_Paulo",
+                "operatorProfessionalId",
+                production.professional())),
+        201);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM package_item WHERE organization_id=? AND package_id=? AND removed_at IS NULL",
+                Integer.class,
+                tenant.id(),
+                packageId))
+        .isEqualTo(1);
+  }
 }

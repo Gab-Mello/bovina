@@ -70,11 +70,13 @@ public class ThawEvents {
   private Result thawOnce(ExecutionContext c, InventoryStore.Thaw intent) {
     var p = packages.lock(c.tenantId(), intent.packageId()).orElseThrow(ThawEvents::missing);
     p.requireSealed();
-    var ledger = store.movements(c.tenantId(), p.id());
+    var withdrawal = store.latestMovement(c.tenantId(), p.id());
     if (p.currentLocationId() != null
-        || ledger.isEmpty()
-        || !ledger.getLast().type().equals("WITHDRAW"))
+        || withdrawal == null
+        || !withdrawal.type().equals("WITHDRAW"))
       throw conflict("PACKAGE_MUST_BE_WITHDRAWN_FOR_THAW");
+    if (intent.occurredAt().isBefore(withdrawal.occurredAt()))
+      throw rejected("THAW_PRECEDES_WITHDRAWAL");
     if (store.hasActiveHold(c.tenantId(), p.id())) throw conflict("PACKAGE_ON_HOLD");
     facilities.requireProfessional(c.tenantId(), intent.professionalId());
     if (intent.protocolVersionId() != null)
@@ -90,7 +92,7 @@ public class ThawEvents {
             .toList();
     if (items.size() != selected.size()) throw rejected("PACKAGE_ITEM_NOT_ACTIVE");
     var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-    store.insertThaw(c, intent, now);
+    store.insertThaw(c, intent, withdrawal.id(), now);
     store.thawMembers(c, intent.id(), p.id(), items, now);
     p.membersThawed(now);
     packages.flush();
