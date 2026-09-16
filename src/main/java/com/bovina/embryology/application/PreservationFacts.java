@@ -2,6 +2,7 @@ package com.bovina.embryology.application;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -14,6 +15,8 @@ public interface PreservationFacts {
   ThawEvidence thawEvidence(UUID tenant, UUID thawEventId, UUID embryoId);
 
   State state(UUID tenant, UUID embryoId);
+
+  Map<UUID, State> states(UUID tenant, Collection<UUID> embryoIds);
 
   record State(String preservation, UUID currentLocationId) {}
 

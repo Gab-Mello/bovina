@@ -21,7 +21,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -166,12 +165,16 @@ public class EmbryoPackages {
   }
 
   @Transactional(readOnly = true)
-  public PageResult<View> page(ExecutionContext c, SearchPage page) {
+  public PageResult<View> page(ExecutionContext c, SearchPage page, UUID location, UUID owner) {
     access.require(c, "inventory:read");
     return new PageResult<>(
         packages
-            .findByOrganizationId(
-                c.tenantId(), PageRequest.of(page.page(), page.size(), Sort.by("id")))
+            .search(
+                c.tenantId(),
+                page.pattern(),
+                location,
+                owner,
+                PageRequest.of(page.page(), page.size()))
             .stream()
             .map(EmbryoPackages::view)
             .toList(),

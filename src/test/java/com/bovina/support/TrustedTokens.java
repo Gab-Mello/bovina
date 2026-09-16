@@ -54,6 +54,12 @@ public final class TrustedTokens implements AutoCloseable {
 
   public String token(String subject, String issuer, String audience, Instant expiresAt)
       throws Exception {
+    return token(subject, issuer, audience, expiresAt, null);
+  }
+
+  public String token(
+      String subject, String issuer, String audience, Instant expiresAt, String scope)
+      throws Exception {
     var claims =
         new JWTClaimsSet.Builder()
             .subject(subject)
@@ -61,6 +67,7 @@ public final class TrustedTokens implements AutoCloseable {
             .issueTime(Date.from(Instant.now().minusSeconds(300)));
     if (audience != null) claims.audience(audience);
     if (expiresAt != null) claims.expirationTime(Date.from(expiresAt));
+    if (scope != null) claims.claim("scope", scope);
     var jwt =
         new SignedJWT(
             new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(key.getKeyID()).build(),

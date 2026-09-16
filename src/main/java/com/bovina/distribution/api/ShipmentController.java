@@ -46,9 +46,10 @@ public class ShipmentController {
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
       HttpServletRequest request,
+      @RequestParam(defaultValue = "") String q,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size) {
-    return shipments.page(context.resolve(jwt, tenant, request), new SearchPage(null, page, size));
+    return shipments.page(context.resolve(jwt, tenant, request), new SearchPage(q, page, size));
   }
 
   @PostMapping("/{id}:validate")

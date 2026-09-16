@@ -149,10 +149,32 @@ public class Embryos {
   @Transactional(readOnly = true)
   public PageResult<View> search(ExecutionContext c, UUID mating, SearchPage page) {
     access.require(c, "embryology:read");
-    if (mating == null) throw rejected("MATING_FILTER_REQUIRED", "Filter embryos by mating");
+    var rows =
+        repository.page(
+            c.tenantId(), mating, page.pattern(), PageRequest.of(page.page(), page.size()));
+    var embryoIds = rows.stream().map(Embryo::id).toList();
+    var states = preservation.states(c.tenantId(), embryoIds);
+    var holds = facts.holds(c.tenantId(), embryoIds);
+    var evaluations = facts.currentEvaluations(c.tenantId(), embryoIds);
     return new PageResult<>(
-        repository.page(c.tenantId(), mating, PageRequest.of(page.page(), page.size())).stream()
-            .map(e -> view(c.tenantId(), e))
+        rows.stream()
+            .map(
+                e -> {
+                  var state = states.get(e.id());
+                  return new View(
+                      e.id(),
+                      e.matingId(),
+                      e.humanCode(),
+                      e.ownerId(),
+                      e.identifiedAt(),
+                      e.availability().name(),
+                      state.preservation(),
+                      holds.getOrDefault(e.id(), List.of()),
+                      state.currentLocationId(),
+                      evaluations.get(e.id()),
+                      e.version(),
+                      e.provenance());
+                })
             .toList(),
         page.page(),
         page.size());

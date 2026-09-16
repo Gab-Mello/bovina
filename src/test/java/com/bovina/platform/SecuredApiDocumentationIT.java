@@ -47,7 +47,13 @@ class SecuredApiDocumentationIT {
     assertThat(JsonMapper.builder().build().readTree(response.body()).path("openapi").asString())
         .startsWith("3.");
     assertThat(response.body())
-        .contains("/api/v1/clients", "bearerAuth")
+        .contains(
+            "/api/v1/clients",
+            "bearerAuth",
+            "/api/v1/embryos/{id}/traceability",
+            "/api/v1/embryos/{id}/timeline",
+            "/api/v1/data-quality",
+            "/api/v1/audit-events")
         .doesNotContain("/parties", "/fivs", "/bulls");
     assertThat(
             get(
