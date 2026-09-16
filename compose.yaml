@@ -1,56 +1,57 @@
-# BovInA — local development stack.
-#
-# Brings up the API and MySQL together for local development and manual API
-# testing. NOT a production deployment file.
-#
-# Usage:
-#   docker compose up --build        # full stack (DB + API)
-#   docker compose up mysql          # database only (for `./mvnw spring-boot:run`)
-#   docker compose down              # stop and remove containers (keeps the DB volume)
-#   docker compose down -v           # also wipe the DB volume (fresh data)
-
+name: bovina
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: bovina-mysql
+  postgres:
+    image: postgres:18.6-bookworm
     environment:
-      MYSQL_DATABASE: pivedatabase
-      # Dev-friendly defaults. Local-development only; not for production.
-      # The API container connects as root with the same password below.
-      MYSQL_ROOT_PASSWORD: "123"
+      POSTGRES_DB: bovina
+      POSTGRES_USER: bovina_bootstrap
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set the local bootstrap password}
+      BOVINA_MIGRATION_PASSWORD: ${BOVINA_MIGRATION_PASSWORD:?Set the migration password}
+      BOVINA_RUNTIME_PASSWORD: ${BOVINA_RUNTIME_PASSWORD:?Set the runtime password}
     ports:
-      - "3306:3306"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - bovina-mysql-data:/var/lib/mysql
+      - postgres-data:/var/lib/postgresql
+      - ./docker/postgres/bootstrap.sql:/docker-entrypoint-initdb.d/10-bovina.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p123"]
-      interval: 5s
-      timeout: 5s
+      test: ["CMD-SHELL", "pg_isready -U bovina_bootstrap -d bovina"]
+      interval: 3s
+      timeout: 3s
       retries: 20
-      start_period: 30s
+    restart: unless-stopped
 
   api:
     build: .
-    image: pive:dev
-    container_name: bovina-api
+    image: bovina:phase0
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     environment:
-      # Inside the API container, the database hostname is the Compose service
-      # name "mysql" -- NOT "localhost". A container's localhost is itself, so
-      # `localhost:3306` from here would fail to connect to the DB.
-      DB_URL: jdbc:mysql://mysql:3306/pivedatabase
-      DB_USERNAME: root
-      DB_PASSWORD: "123"
-      # Local-dev profile flips bovina.error.legacy-format=false so errors are
-      # emitted as RFC 7807 ProblemDetail JSON. See application-dev.properties.
-      SPRING_PROFILES_ACTIVE: dev
-      # CORS for a Vite dev server on the host. Override if the frontend lives
-      # somewhere else.
-      BOVINA_CORS_ORIGINS: http://localhost:5173
+      SPRING_PROFILES_ACTIVE: ${BOVINA_PROFILE:-dev}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bovina
+      SPRING_DATASOURCE_USERNAME: bovina_runtime
+      SPRING_DATASOURCE_PASSWORD: ${BOVINA_RUNTIME_PASSWORD:?Set the runtime password}
+      SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/bovina
+      SPRING_FLYWAY_USER: bovina_migration
+      SPRING_FLYWAY_PASSWORD: ${BOVINA_MIGRATION_PASSWORD:?Set the migration password}
+      BOVINA_SECURITY_ISSUER: ${BOVINA_SECURITY_ISSUER:?Set the trusted issuer}
+      BOVINA_SECURITY_JWK_SET_URI: ${BOVINA_SECURITY_JWK_SET_URI:?Set the JWKS URI}
+      BOVINA_SECURITY_AUDIENCE: ${BOVINA_SECURITY_AUDIENCE:?Set the API audience}
+      BOVINA_BOOTSTRAP_ENABLED: ${BOVINA_BOOTSTRAP_ENABLED:-false}
+      BOVINA_BOOTSTRAP_ISSUER: ${BOVINA_BOOTSTRAP_ISSUER:-}
+      BOVINA_BOOTSTRAP_SUBJECT: ${BOVINA_BOOTSTRAP_SUBJECT:-}
+      BOVINA_CORS_ALLOWED_ORIGINS: ${BOVINA_CORS_ALLOWED_ORIGINS:-}
+      BOVINA_DISTRIBUTION_REGULATED_DISPATCH: ${BOVINA_DISTRIBUTION_REGULATED_DISPATCH:-true}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 40s
 
 volumes:
-  bovina-mysql-data:
+  postgres-data:
