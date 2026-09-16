@@ -64,7 +64,7 @@ public final class TestHttpClient {
       Object body,
       String bearerToken)
       throws Exception {
-    var uri = path.startsWith("/api/") ? path : "/api/v1" + path;
+    var uri = path.startsWith("/api/") || path.startsWith("/actuator/") ? path : "/api/v1" + path;
     var builder =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + uri))
             .timeout(Duration.ofSeconds(30))
@@ -159,5 +159,14 @@ public final class TestHttpClient {
         IntegrationTestRuntime.TOKENS.issuer().toString(),
         "bovina-test",
         Instant.now().plusSeconds(600));
+  }
+
+  public String operationsToken() throws Exception {
+    return IntegrationTestRuntime.TOKENS.token(
+        "operations",
+        IntegrationTestRuntime.TOKENS.issuer().toString(),
+        "bovina-test",
+        Instant.now().plusSeconds(600),
+        "observability:read");
   }
 }

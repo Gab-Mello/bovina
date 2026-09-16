@@ -61,6 +61,9 @@ public class SecurityConfiguration {
             auth ->
                 auth.requestMatchers("/actuator/health/liveness", "/actuator/health/readiness")
                     .permitAll()
+                    // Global operational metrics are not granted by tenant membership.
+                    .requestMatchers("/actuator/metrics", "/actuator/metrics/**")
+                    .hasAuthority("SCOPE_observability:read")
                     .anyRequest()
                     .authenticated())
         .exceptionHandling(
