@@ -145,19 +145,6 @@ public class MatingStore {
         Timestamp.from(now));
   }
 
-  public void requestCorrection(
-      UUID tenant, UUID id, UUID mating, String reason, Object proposed, UUID actor, Instant now) {
-    jdbc.update(
-        "INSERT INTO record_correction(id,organization_id,subject_type,subject_id,reason,proposed_change,status,requested_by,requested_at) VALUES (?,?,'MATING',?,?,?::jsonb,'REQUESTED',?,?)",
-        id,
-        tenant,
-        mating,
-        reason,
-        json.writeValueAsString(proposed),
-        actor,
-        Timestamp.from(now));
-  }
-
   public void complete(UUID tenant, UUID mating, long expectedVersion) {
     var changed =
         jdbc.update(

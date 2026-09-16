@@ -1,6 +1,7 @@
 package com.bovina.fertilization.application;
 
 import com.bovina.audit.application.*;
+import com.bovina.compliance.application.RecordCorrections;
 import com.bovina.documents.application.DocumentReferences;
 import com.bovina.fertilization.domain.*;
 import com.bovina.fertilization.infrastructure.MatingStore;
@@ -31,6 +32,7 @@ public class Matings {
   private final AuditRecorder audit;
   private final StableIds ids;
   private final Clock clock;
+  private final RecordCorrections corrections;
 
   public Matings(
       TenantAccess access,
@@ -43,7 +45,8 @@ public class Matings {
       CommandReceiptStore hashes,
       AuditRecorder audit,
       StableIds ids,
-      Clock clock) {
+      Clock clock,
+      RecordCorrections corrections) {
     this.access = access;
     this.collections = collections;
     this.semen = semen;
@@ -55,6 +58,7 @@ public class Matings {
     this.audit = audit;
     this.ids = ids;
     this.clock = clock;
+    this.corrections = corrections;
   }
 
   @Transactional
@@ -190,22 +194,22 @@ public class Matings {
           if (request.proposedSemenBatchId() != null)
             semen.requireLineage(c.tenantId(), request.proposedSemenBatchId());
           var id = ids.next();
-          var now = now();
-          store.requestCorrection(
-              c.tenantId(), id, mating.id(), request.reason(), request, c.actorId(), now);
-          audit.record(
-              new AuditEvent(
-                  ids.next(),
+          var recorded =
+              corrections.request(
                   c,
-                  now,
-                  "CORRECT",
-                  "MATING",
-                  mating.id(),
-                  mating.version(),
-                  request.reason(),
-                  null,
-                  "REQUESTED"));
-          return new CorrectionView(id, mating.id(), "REQUESTED", now);
+                  id,
+                  new RecordCorrections.Request(
+                      id,
+                      "MATING",
+                      mating.id(),
+                      mating.version(),
+                      request.reason(),
+                      null,
+                      new RecordCorrections.Proposal(
+                          request.proposedSemenBatchId(),
+                          request.proposedFertilizedAt(),
+                          request.reason())));
+          return new CorrectionView(id, mating.id(), recorded.status(), recorded.requestedAt());
         });
   }
 
