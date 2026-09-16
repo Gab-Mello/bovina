@@ -28,6 +28,83 @@ public class InventoryStore {
             packageId));
   }
 
+  public boolean hasShipmentReservation(UUID tenant, UUID packageId) {
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM inventory_shipment_reservation WHERE organization_id=? AND package_id=? AND released_at IS NULL)",
+            Boolean.class,
+            tenant,
+            packageId));
+  }
+
+  public void reserveShipment(ExecutionContext c, UUID itemId, UUID packageId, Instant now) {
+    jdbc.update(
+        "INSERT INTO inventory_shipment_reservation(organization_id,shipment_item_id,package_id,reserved_at) VALUES (?,?,?,?)",
+        c.tenantId(),
+        itemId,
+        packageId,
+        Timestamp.from(now));
+  }
+
+  public boolean ownsShipmentReservation(UUID tenant, UUID itemId, UUID packageId) {
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM inventory_shipment_reservation WHERE organization_id=? AND shipment_item_id=? AND package_id=? AND released_at IS NULL)",
+            Boolean.class,
+            tenant,
+            itemId,
+            packageId));
+  }
+
+  public void releaseShipment(UUID tenant, UUID itemId, String reason, Instant now) {
+    if (jdbc.update(
+            "UPDATE inventory_shipment_reservation SET released_at=?,release_reason=? WHERE organization_id=? AND shipment_item_id=? AND released_at IS NULL",
+            Timestamp.from(now),
+            reason,
+            tenant,
+            itemId)
+        != 1) throw new IllegalStateException("Shipment reservation changed while locked");
+  }
+
+  public void appendShipmentMovement(
+      ExecutionContext c,
+      UUID id,
+      UUID itemId,
+      UUID packageId,
+      long sequence,
+      String type,
+      UUID from,
+      UUID to,
+      Instant occurredAt,
+      String reason,
+      Instant now) {
+    jdbc.update(
+        "INSERT INTO inventory_movement(id,organization_id,package_id,sequence,movement_type,from_location_id,to_location_id,occurred_at,performed_by,reason,idempotency_key,recorded_at,origin_type,shipment_item_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'MANUAL',?)",
+        id,
+        c.tenantId(),
+        packageId,
+        sequence,
+        type,
+        from,
+        to,
+        Timestamp.from(occurredAt),
+        c.actorId(),
+        reason,
+        id,
+        Timestamp.from(now),
+        itemId);
+  }
+
+  public boolean isLatestShipment(UUID tenant, UUID packageId, UUID itemId) {
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "SELECT coalesce((SELECT movement_type='SHIP' AND shipment_item_id=? FROM inventory_movement WHERE organization_id=? AND package_id=? ORDER BY sequence DESC LIMIT 1),false)",
+            Boolean.class,
+            itemId,
+            tenant,
+            packageId));
+  }
+
   public boolean activeLocation(UUID tenant, UUID establishment, UUID location) {
     var statuses =
         jdbc.query(

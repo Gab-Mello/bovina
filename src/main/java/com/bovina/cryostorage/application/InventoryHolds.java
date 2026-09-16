@@ -60,6 +60,9 @@ public class InventoryHolds {
                   .lock(c.tenantId(), hold.packageId())
                   .orElseThrow(InventoryHolds::missingPackage);
           p.requireSealed();
+          var latest = store.latestMovement(c.tenantId(), p.id());
+          if (p.currentLocationId() == null && latest != null && latest.type().equals("SHIP"))
+            throw conflict("PACKAGE_OUT_OF_CUSTODY");
           var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
           store.openHold(c, hold, now);
           audit.record(

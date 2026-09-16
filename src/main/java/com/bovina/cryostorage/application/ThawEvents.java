@@ -70,6 +70,8 @@ public class ThawEvents {
   private Result thawOnce(ExecutionContext c, InventoryStore.Thaw intent) {
     var p = packages.lock(c.tenantId(), intent.packageId()).orElseThrow(ThawEvents::missing);
     p.requireSealed();
+    if (store.hasShipmentReservation(c.tenantId(), p.id()))
+      throw conflict("PACKAGE_RESERVED_FOR_SHIPMENT");
     var withdrawal = store.latestMovement(c.tenantId(), p.id());
     if (p.currentLocationId() != null
         || withdrawal == null

@@ -68,6 +68,11 @@ public class Embryo {
     availabilityStatus = AvailabilityStatus.DISCARDED;
   }
 
+  public void shipOut() {
+    require(AvailabilityStatus.AVAILABLE, "EMBRYO_NOT_AVAILABLE_FOR_SHIPMENT");
+    availabilityStatus = AvailabilityStatus.SHIPPED_OUT;
+  }
+
   private void require(AvailabilityStatus expected, String code) {
     if (availabilityStatus != expected) throw conflict(code);
   }

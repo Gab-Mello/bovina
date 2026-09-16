@@ -81,6 +81,31 @@ public class EmbryoCryopreservationBoundary {
     embryos.flush();
   }
 
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void requireShippablePackageMembers(UUID tenant, Collection<UUID> ids) {
+    var ordered = new TreeSet<>(ids);
+    var locked = embryos.lockAll(tenant, ordered);
+    if (ordered.isEmpty() || ordered.size() != ids.size() || locked.size() != ordered.size())
+      throw missing();
+    for (var embryo : locked) {
+      if (embryo.availability() != Embryo.AvailabilityStatus.AVAILABLE)
+        throw conflict("EMBRYO_NOT_AVAILABLE_FOR_SHIPMENT");
+      if (facts.hasActiveHold(tenant, embryo.id())) throw conflict("EMBRYO_ON_HOLD");
+    }
+  }
+
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void shipPackageMembers(UUID tenant, Collection<UUID> ids) {
+    var ordered = new TreeSet<>(ids);
+    var locked = embryos.lockAll(tenant, ordered);
+    if (locked.size() != ordered.size()) throw missing();
+    for (var embryo : locked) {
+      if (facts.hasActiveHold(tenant, embryo.id())) throw conflict("EMBRYO_ON_HOLD");
+      embryo.shipOut();
+    }
+    embryos.flush();
+  }
+
   private static ApplicationFailure missing() {
     return new ApplicationFailure(
         ApplicationFailure.Kind.NOT_FOUND, "EMBRYO_NOT_FOUND", "Embryo not found");

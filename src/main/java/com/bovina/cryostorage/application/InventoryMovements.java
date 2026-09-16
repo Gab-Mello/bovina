@@ -109,6 +109,11 @@ public class InventoryMovements {
         packages.lock(c.tenantId(), intent.packageId()).orElseThrow(InventoryMovements::missing);
     if (p.version() != intent.expectedVersion()) throw conflict("STALE_PACKAGE_VERSION");
     p.requireSealed();
+    if (store.hasShipmentReservation(c.tenantId(), p.id()))
+      throw conflict("PACKAGE_RESERVED_FOR_SHIPMENT");
+    var latest = store.latestMovement(c.tenantId(), p.id());
+    if (p.currentLocationId() == null && latest != null && latest.type().equals("SHIP"))
+      throw conflict("SHIPPED_PACKAGE_REQUIRES_RETURN_WORKFLOW");
     if (!Objects.equals(p.currentLocationId(), intent.expectedLocationId()))
       throw conflict("PACKAGE_NOT_IN_EXPECTED_LOCATION");
     if (store.hasActiveHold(c.tenantId(), p.id())) throw conflict("PACKAGE_ON_HOLD");
