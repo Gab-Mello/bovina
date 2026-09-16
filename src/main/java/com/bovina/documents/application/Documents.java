@@ -146,6 +146,14 @@ public class Documents {
   }
 
   @Transactional(readOnly = true)
+  public VersionView version(ExecutionContext c, UUID documentId, UUID versionId) {
+    access.require(c, "documents:read");
+    var version = store.version(c.tenantId(), documentId, versionId);
+    if (version == null) throw missing();
+    return version;
+  }
+
+  @Transactional(readOnly = true)
   public PageResult<DocumentView> page(ExecutionContext c, SearchPage page) {
     access.require(c, "documents:read");
     return new PageResult<>(store.page(c.tenantId(), page), page.page(), page.size());

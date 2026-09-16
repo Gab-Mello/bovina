@@ -32,7 +32,9 @@ class MembershipTest {
             "fertilization:read",
             "embryology:read",
             "transfer:read",
-            "inventory:read");
+            "inventory:read",
+            "shipment:read",
+            "recall:read");
     assertThat(MembershipRole.READ_ONLY.permissions()).doesNotContain("opu:write");
     assertThat(MembershipRole.OPERATOR.permissions()).doesNotContain("membership:manage");
     assertThat(MembershipRole.OPERATOR.permissions()).doesNotContain("protocol:manage");
