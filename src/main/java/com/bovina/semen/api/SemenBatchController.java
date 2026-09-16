@@ -65,9 +65,10 @@ public class SemenBatchController {
       @AuthenticationPrincipal Jwt jwt,
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
       HttpServletRequest request,
+      @RequestParam(defaultValue = "") String q,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size) {
-    return batches.batches(context(jwt, tenant, request), new SearchPage("", page, size));
+    return batches.batches(context(jwt, tenant, request), new SearchPage(q, page, size));
   }
 
   public record Registration(

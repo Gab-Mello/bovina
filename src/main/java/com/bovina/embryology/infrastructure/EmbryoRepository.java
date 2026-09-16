@@ -23,6 +23,6 @@ public interface EmbryoRepository extends Repository<Embryo, UUID> {
   List<Embryo> lockAll(UUID tenant, Collection<UUID> ids);
 
   @Query(
-      "select e from Embryo e where e.organizationId=:tenant and e.matingId=:mating order by e.id")
-  List<Embryo> page(UUID tenant, UUID mating, Pageable pageable);
+      "select e from Embryo e where e.organizationId=:tenant and (:mating is null or e.matingId=:mating) and lower(e.humanCode) like lower(:pattern) escape '\\' order by e.id")
+  List<Embryo> page(UUID tenant, UUID mating, String pattern, Pageable pageable);
 }

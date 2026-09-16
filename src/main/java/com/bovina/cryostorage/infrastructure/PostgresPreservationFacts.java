@@ -3,6 +3,7 @@ package com.bovina.cryostorage.infrastructure;
 import com.bovina.embryology.application.PreservationFacts;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -52,5 +53,33 @@ public class PostgresPreservationFacts implements PreservationFacts {
                 tenant,
                 embryoId);
     return rows.getFirst();
+  }
+
+  @Override
+  public Map<UUID, State> states(UUID tenant, Collection<UUID> embryoIds) {
+    if (embryoIds.isEmpty()) return Map.of();
+    var result = new java.util.HashMap<UUID, State>();
+    jdbc.query(
+        """
+        SELECT e.id,
+          EXISTS(SELECT 1 FROM cryopreservation_item c WHERE c.organization_id=e.organization_id AND c.embryo_id=e.id) frozen,
+          EXISTS(SELECT 1 FROM thaw_event_item t WHERE t.organization_id=e.organization_id AND t.embryo_id=e.id) thawed,
+          p.current_location_id
+        FROM embryo e
+        LEFT JOIN package_item i ON i.organization_id=e.organization_id AND i.embryo_id=e.id AND i.removed_at IS NULL
+        LEFT JOIN embryo_package p ON p.organization_id=i.organization_id AND p.id=i.package_id
+        WHERE e.organization_id=:tenant AND e.id IN (:ids)
+        """,
+        Map.of("tenant", tenant, "ids", embryoIds),
+        rs -> {
+          result.put(
+              rs.getObject("id", UUID.class),
+              new State(
+                  !rs.getBoolean("frozen")
+                      ? "FRESH"
+                      : rs.getBoolean("thawed") ? "THAWED" : "CRYOPRESERVED",
+                  rs.getObject("current_location_id", UUID.class)));
+        });
+    return Map.copyOf(result);
   }
 }

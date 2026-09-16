@@ -235,7 +235,13 @@ public class ShipmentEvidence {
 
   public List<Shipments.Summary> page(UUID tenant, SearchPage page) {
     return jdbc.query(
-        "SELECT id,status,version,establishment_id,destination_recipient_id,created_at FROM shipment WHERE organization_id=? ORDER BY created_at DESC,id LIMIT ? OFFSET ?",
+        """
+        SELECT s.id,s.status,s.version,s.establishment_id,s.destination_recipient_id,s.created_at
+          FROM shipment s JOIN party p ON p.organization_id=s.organization_id AND p.id=s.destination_recipient_id
+          LEFT JOIN shipment_destination_snapshot d ON d.organization_id=s.organization_id AND d.shipment_id=s.id
+          WHERE s.organization_id=? AND (s.id::text ILIKE ? OR s.status ILIKE ? OR coalesce(d.recipient_name,p.display_name) ILIKE ?)
+          ORDER BY s.created_at DESC,s.id LIMIT ? OFFSET ?
+        """,
         (rs, n) ->
             new Shipments.Summary(
                 rs.getObject(1, UUID.class),
@@ -245,6 +251,9 @@ public class ShipmentEvidence {
                 rs.getObject(5, UUID.class),
                 rs.getTimestamp(6).toInstant()),
         tenant,
+        page.pattern(),
+        page.pattern(),
+        page.pattern(),
         page.size(),
         page.offset());
   }

@@ -53,9 +53,10 @@ public class EmbryoController {
       @RequestHeader(value = "X-Organization-ID", required = false) UUID tenant,
       HttpServletRequest request,
       @RequestParam(required = false) UUID matingId,
+      @RequestParam(defaultValue = "") String q,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size) {
-    return embryos.search(context(jwt, tenant, request), matingId, new SearchPage("", page, size));
+    return embryos.search(context(jwt, tenant, request), matingId, new SearchPage(q, page, size));
   }
 
   @PostMapping("/embryos/{id}:discard")

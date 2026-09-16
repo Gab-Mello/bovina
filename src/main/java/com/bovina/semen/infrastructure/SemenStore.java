@@ -133,13 +133,14 @@ public class SemenStore {
         .findFirst();
   }
 
-  public List<SemenBatch> batchPage(UUID tenant, int size, int offset) {
+  public List<SemenBatch> batchPage(UUID tenant, com.bovina.platform.application.SearchPage page) {
     return jdbc.query(
-        "SELECT * FROM semen_batch WHERE organization_id=? ORDER BY lower(batch_code),id LIMIT ? OFFSET ?",
+        "SELECT * FROM semen_batch WHERE organization_id=? AND batch_code ILIKE ? ORDER BY lower(batch_code),id LIMIT ? OFFSET ?",
         BATCH,
         tenant,
-        size,
-        offset);
+        page.pattern(),
+        page.size(),
+        page.offset());
   }
 
   private static Instant instant(ResultSet rs, String column) throws SQLException {

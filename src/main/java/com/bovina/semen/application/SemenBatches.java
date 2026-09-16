@@ -126,8 +126,7 @@ public class SemenBatches {
   @Transactional(readOnly = true)
   public PageResult<SemenBatch> batches(ExecutionContext c, SearchPage page) {
     access.require(c, "semen:read");
-    return new PageResult<>(
-        store.batchPage(c.tenantId(), page.size(), page.offset()), page.page(), page.size());
+    return new PageResult<>(store.batchPage(c.tenantId(), page), page.page(), page.size());
   }
 
   @Transactional(readOnly = true)

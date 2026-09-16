@@ -7,14 +7,17 @@ import java.sql.*;
 import java.time.Instant;
 import java.util.*;
 import org.springframework.jdbc.core.*;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class EmbryologyFacts {
   private final JdbcTemplate jdbc;
+  private final NamedParameterJdbcTemplate named;
 
-  public EmbryologyFacts(JdbcTemplate jdbc) {
+  public EmbryologyFacts(JdbcTemplate jdbc, NamedParameterJdbcTemplate named) {
     this.jdbc = jdbc;
+    this.named = named;
   }
 
   private static final RowMapper<EmbryoEvaluation> EVALUATION =
@@ -110,6 +113,27 @@ public class EmbryologyFacts {
         HOLD,
         tenant,
         embryo);
+  }
+
+  public Map<UUID, List<Hold>> holds(UUID tenant, Collection<UUID> embryos) {
+    if (embryos.isEmpty()) return Map.of();
+    var rows =
+        named.query(
+            "SELECT * FROM embryo_hold WHERE organization_id=:tenant AND embryo_id IN (:ids) ORDER BY opened_at,id",
+            Map.of("tenant", tenant, "ids", embryos),
+            HOLD);
+    return rows.stream().collect(java.util.stream.Collectors.groupingBy(Hold::embryoId));
+  }
+
+  public Map<UUID, EmbryoEvaluation> currentEvaluations(UUID tenant, Collection<UUID> embryos) {
+    if (embryos.isEmpty()) return Map.of();
+    return named
+        .query(
+            "SELECT e.* FROM embryo_current_assessment c JOIN embryo_evaluation e ON e.organization_id=c.organization_id AND e.id=c.evaluation_id WHERE c.organization_id=:tenant AND c.embryo_id IN (:ids)",
+            Map.of("tenant", tenant, "ids", embryos),
+            EVALUATION)
+        .stream()
+        .collect(java.util.stream.Collectors.toUnmodifiableMap(EmbryoEvaluation::embryoId, e -> e));
   }
 
   private Hold hold(UUID tenant, UUID id) {

@@ -77,7 +77,7 @@ public class RecallStore {
 
   public List<Recalls.CaseView> page(UUID tenant, SearchPage page) {
     return jdbc.query(
-        "SELECT id,trigger_type,trigger_id,reason,opened_at,source_document_id FROM recall_case WHERE organization_id=? ORDER BY opened_at DESC,id LIMIT ? OFFSET ?",
+        "SELECT id,trigger_type,trigger_id,reason,opened_at,source_document_id FROM recall_case WHERE organization_id=? AND (reason ILIKE ? OR trigger_type ILIKE ? OR id::text ILIKE ?) ORDER BY opened_at DESC,id LIMIT ? OFFSET ?",
         (rs, n) ->
             new Recalls.CaseView(
                 rs.getObject(1, UUID.class),
@@ -87,6 +87,9 @@ public class RecallStore {
                 rs.getTimestamp(5).toInstant(),
                 rs.getObject(6, UUID.class)),
         tenant,
+        page.pattern(),
+        page.pattern(),
+        page.pattern(),
         page.size(),
         page.offset());
   }
