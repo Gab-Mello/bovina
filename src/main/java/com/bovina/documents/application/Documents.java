@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class Documents {
-  private static final int MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+  public static final int MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
   private final DocumentStore store;
   private final DocumentContent content;
@@ -158,13 +158,29 @@ public class Documents {
     return new PageResult<>(store.versions(c.tenantId(), id, page), page.page(), page.size());
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public Download download(ExecutionContext c, UUID documentId, UUID versionId) {
     access.require(c, "documents:read");
     require(c.tenantId(), documentId, false);
     var version = store.version(c.tenantId(), documentId, versionId);
     if (version == null) throw missing();
-    return new Download(version, content.get(c.tenantId(), versionId));
+    var bytes = content.get(c.tenantId(), versionId);
+    if (bytes.length != version.sizeBytes() || !checksum(bytes).equals(version.checksum()))
+      throw new IllegalStateException(
+          "Stored document content does not match its immutable checksum");
+    audit.record(
+        new AuditEvent(
+            ids.next(),
+            c,
+            now(),
+            "DOWNLOAD",
+            "DOCUMENT_VERSION",
+            versionId,
+            (long) version.versionNumber(),
+            null,
+            null,
+            "AUTHORIZED"));
+    return new Download(version, bytes);
   }
 
   private DocumentView require(UUID tenant, UUID id, boolean lock) {
@@ -210,6 +226,7 @@ public class Documents {
               .chars()
               .anyMatch(c -> c == '/' || c == '\\' || Character.isISOControl(c))
           || mimeType == null
+          || mimeType.length() > 128
           || !mimeType.matches("[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+")
           || bytes == null
           || bytes.length == 0

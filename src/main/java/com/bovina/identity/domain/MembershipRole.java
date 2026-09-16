@@ -13,7 +13,6 @@ public enum MembershipRole {
           "documents:read",
           "documents:write",
           "compliance:read",
-          "compliance:manage",
           "protocol:manage",
           "opu:read",
           "opu:write",

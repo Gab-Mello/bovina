@@ -7,6 +7,7 @@ import com.bovina.platform.application.ExecutionContext;
 import com.bovina.platform.application.PageResult;
 import com.bovina.platform.application.SearchPage;
 import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.springframework.http.ContentDisposition;
@@ -52,10 +53,13 @@ public class DocumentController {
       @RequestParam long expectedVersion,
       @RequestHeader("X-File-Name") String fileName,
       @RequestHeader("Content-Type") String mimeType,
-      @RequestHeader(value = "X-Source-Document-ID", required = false) UUID sourceDocumentId,
-      @RequestBody byte[] bytes) {
+      @RequestHeader(value = "X-Source-Document-ID", required = false) UUID sourceDocumentId)
+      throws IOException {
+    var execution = context(jwt, tenant, request);
+    access.require(execution, "documents:write");
+    var bytes = request.getInputStream().readNBytes(Documents.MAX_UPLOAD_BYTES + 1);
     return documents.upload(
-        context(jwt, tenant, request),
+        execution,
         key,
         id,
         new Documents.Upload(
