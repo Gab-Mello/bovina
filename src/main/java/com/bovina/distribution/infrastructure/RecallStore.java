@@ -126,6 +126,13 @@ public class RecallStore {
       LEFT JOIN LATERAL (SELECT to_location_id FROM inventory_movement im WHERE im.organization_id=p.organization_id AND im.package_id=p.id AND im.recorded_at<=? ORDER BY sequence DESC LIMIT 1) l ON true
       LEFT JOIN shipment_item si ON si.organization_id=p.organization_id AND si.package_id=p.id
           AND EXISTS(SELECT 1 FROM shipment_destination_snapshot ds WHERE ds.organization_id=si.organization_id AND ds.shipment_id=si.shipment_id AND ds.recorded_at<=?)
+          AND NOT EXISTS (
+              SELECT 1 FROM thaw_event_item ti
+              JOIN thaw_event te ON te.organization_id=ti.organization_id AND te.id=ti.thaw_event_id
+              JOIN inventory_movement withdrawal ON withdrawal.organization_id=te.organization_id AND withdrawal.id=te.withdrawal_movement_id
+              JOIN inventory_movement sent ON sent.organization_id=si.organization_id AND sent.shipment_item_id=si.id AND sent.movement_type='SHIP'
+              WHERE ti.organization_id=pi.organization_id AND ti.package_item_id=pi.id AND withdrawal.sequence<sent.sequence
+          )
       LEFT JOIN shipment_destination_snapshot d ON d.organization_id=si.organization_id AND d.shipment_id=si.shipment_id
       LEFT JOIN embryo_transfer t ON t.organization_id=a.organization_id AND t.embryo_id=a.id AND t.recorded_at<=?
       ORDER BY a.id,p.id,si.shipment_id LIMIT ? OFFSET ?
@@ -166,20 +173,25 @@ public class RecallStore {
         page.offset());
   }
 
-  public Set<UUID> affectedPackages(
+  public Map<UUID, Set<UUID>> affectedMembers(
       UUID tenant, Recalls.CaseView recall, Instant cutoff, List<UUID> packages) {
     var arguments =
         new ArrayList<Object>(
             List.of(tenant, recall.triggerId(), Timestamp.from(cutoff), Timestamp.from(cutoff)));
     arguments.addAll(packages);
-    return new HashSet<>(
-        jdbc.query(
-            affected(recall.triggerType())
-                + "SELECT DISTINCT pi.package_id FROM affected a JOIN package_item pi ON pi.organization_id=a.organization_id AND pi.embryo_id=a.id WHERE pi.added_at<=? AND pi.package_id IN ("
-                + String.join(",", Collections.nCopies(packages.size(), "?"))
-                + ")",
-            (rs, n) -> rs.getObject(1, UUID.class),
-            arguments.toArray()));
+    var result = new HashMap<UUID, Set<UUID>>();
+    jdbc.query(
+        affected(recall.triggerType())
+            + "SELECT DISTINCT pi.package_id,a.id AS embryo_id FROM affected a JOIN package_item pi ON pi.organization_id=a.organization_id AND pi.embryo_id=a.id WHERE pi.added_at<=? AND pi.package_id IN ("
+            + String.join(",", Collections.nCopies(packages.size(), "?"))
+            + ")",
+        rs -> {
+          result
+              .computeIfAbsent(rs.getObject("package_id", UUID.class), ignored -> new HashSet<>())
+              .add(rs.getObject("embryo_id", UUID.class));
+        },
+        arguments.toArray());
+    return result;
   }
 
   public void holdExecution(

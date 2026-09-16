@@ -161,7 +161,18 @@ public class Shipments {
           evidence.cancel(c, id, input.reason(), now());
           s.cancel(input.expectedVersion());
           shipments.flush();
-          recordAudit(c, s, "CANCEL", "DRAFT", "CANCELLED");
+          audit.record(
+              new AuditEvent(
+                  ids.next(),
+                  c,
+                  now(),
+                  "CANCEL",
+                  "SHIPMENT",
+                  s.id(),
+                  s.version(),
+                  input.reason(),
+                  "DRAFT",
+                  "CANCELLED"));
           return view(c, s);
         });
   }

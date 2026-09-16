@@ -116,7 +116,7 @@ public class ShipmentInventory {
           null,
           now());
       store.releaseShipment(c.tenantId(), item.id(), "DISPATCHED", now());
-      recordAudit(c, item, "SHIP", from, null);
+      recordAudit(c, item, "SHIP", from, null, null);
     }
     packages.flush();
   }
@@ -153,11 +153,14 @@ public class ShipmentInventory {
         reason,
         now());
     // Custody is restored; availability remains SHIPPED_OUT until a validated policy/correction.
-    recordAudit(c, item, "RETURN", null, destination);
+    recordAudit(c, item, "RETURN", null, destination, reason);
   }
 
   public List<HoldResult> placeRecallHolds(
-      ExecutionContext c, List<HoldIntent> intents, String reason) {
+      ExecutionContext c,
+      List<HoldIntent> intents,
+      String reason,
+      Map<UUID, Set<UUID>> affectedMembers) {
     var locked = lock(c, intents.stream().map(HoldIntent::packageId).toList());
     var results = new ArrayList<HoldResult>();
     for (var input : intents) {
@@ -166,7 +169,9 @@ public class ShipmentInventory {
       UUID holdId = null;
       if (p.version() != input.expectedVersion()) result = "STALE_PACKAGE_VERSION";
       else if (p.status() != EmbryoPackage.Status.SEALED
-          || members.activeMembers(c.tenantId(), p.id()).isEmpty()) result = "MATERIAL_UNAVAILABLE";
+          || members.activeMembers(c.tenantId(), p.id()).stream()
+              .noneMatch(member -> affectedMembers.get(p.id()).contains(member.embryoId())))
+        result = "MATERIAL_UNAVAILABLE";
       else if (p.currentLocationId() == null) result = "OUT_OF_CUSTODY";
       else if (store.hasActiveHold(c.tenantId(), p.id())) result = "ALREADY_HELD";
       else {
@@ -218,7 +223,8 @@ public class ShipmentInventory {
       throw conflict("STORAGE_LOCATION_NOT_ACTIVE");
   }
 
-  private void recordAudit(ExecutionContext c, Item item, String action, UUID from, UUID to) {
+  private void recordAudit(
+      ExecutionContext c, Item item, String action, UUID from, UUID to, String reason) {
     audit.record(
         new AuditEvent(
             ids.next(),
@@ -228,7 +234,7 @@ public class ShipmentInventory {
             "SHIPMENT_ITEM",
             item.id(),
             null,
-            null,
+            reason,
             from == null ? null : from.toString(),
             to == null ? null : to.toString()));
   }

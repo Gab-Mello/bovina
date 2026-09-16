@@ -118,10 +118,10 @@ public class Recalls {
           var cutoff = cutoff(recall, input.cutoff());
           var packages =
               input.items().stream().map(ShipmentInventory.HoldIntent::packageId).toList();
-          if (!store
-              .affectedPackages(c.tenantId(), recall, cutoff, packages)
-              .equals(new HashSet<>(packages))) throw rejected("PACKAGE_OUTSIDE_RECALL_IMPACT");
-          var results = inventory.placeRecallHolds(c, input.items(), recall.reason());
+          var affected = store.affectedMembers(c.tenantId(), recall, cutoff, packages);
+          if (!affected.keySet().equals(new HashSet<>(packages)))
+            throw rejected("PACKAGE_OUTSIDE_RECALL_IMPACT");
+          var results = inventory.placeRecallHolds(c, input.items(), recall.reason(), affected);
           store.holdExecution(c, input.id(), id, cutoff, results, now());
           audit.record(
               new AuditEvent(
