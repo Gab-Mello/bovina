@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.bovina.support.fixture.CryostorageFixtures;
 import com.bovina.support.fixture.ProductionFixtures;
+import com.bovina.support.fixture.TransferFixtures;
 import com.bovina.support.integration.AuthenticatedIntegrationTest;
 import java.net.http.HttpResponse;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -15,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 
 class HistoricalCorrectionIT extends AuthenticatedIntegrationTest {
   @Test
@@ -126,6 +130,16 @@ class HistoricalCorrectionIT extends AuthenticatedIntegrationTest {
                 "proposal",
                 Map.of("semantics", "Review"))),
         404);
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "INSERT INTO record_correction(id,organization_id,subject_type,subject_id,mating_id,reason,proposed_change,status,requested_by,requested_at) VALUES (?,?,'MATING',?,?,'Foreign target','{}'::jsonb,'REQUESTED',?,CURRENT_TIMESTAMP)",
+                    id(),
+                    other.id(),
+                    production.mating(),
+                    production.mating(),
+                    other.actorId()))
+        .isInstanceOf(DataIntegrityViolationException.class);
     for (var subject :
         List.of(
             Map.entry("CRYOPRESERVATION_ITEM", cryo.cryoItem()),
@@ -151,6 +165,76 @@ class HistoricalCorrectionIT extends AuthenticatedIntegrationTest {
       assertThat(api.get(lab.id(), "/corrections/" + requested).body())
           .contains("previousSemantics", "REQUESTED");
     }
+  }
+
+  @Test
+  void transferAndOutcomeReviewKeepsPerformedAndCheckedFactsUnchanged() throws Exception {
+    var lab = tenant("Outcome Evidence Review Lab");
+    var production = ProductionFixtures.freshEmbryos(api, lab, 1);
+    var recipient = ProductionFixtures.animal(api, lab.id(), "FEMALE", "Recipient A");
+    var cycle = TransferFixtures.openCycle(api, lab.id(), recipient, LocalDate.of(2026, 9, 1));
+    var reservation =
+        TransferFixtures.reservation(api, lab.id(), production.embryos().getFirst(), cycle, 0);
+    var transfer =
+        TransferFixtures.perform(
+            api,
+            lab.id(),
+            reservation.id(),
+            1,
+            production.professional(),
+            Instant.parse("2026-09-01T12:00:00Z"));
+    var check = id();
+    var batch = id();
+    assertStatus(
+        api.post(
+            lab.id(),
+            "/pregnancy-checks:bulk",
+            batch,
+            TransferFixtures.checkBatch(
+                batch,
+                TransferFixtures.checkItem(
+                    check,
+                    transfer.id(),
+                    Instant.parse("2026-10-01T12:00:00Z"),
+                    "PREGNANT",
+                    production.professional(),
+                    null,
+                    null))),
+        200);
+    for (var subject :
+        List.of(Map.entry("EMBRYO_TRANSFER", transfer.id()), Map.entry("PREGNANCY_CHECK", check))) {
+      var correction = id();
+      assertStatus(
+          api.post(
+              lab.id(),
+              "/corrections",
+              correction,
+              Map.of(
+                  "id",
+                  correction,
+                  "subjectType",
+                  subject.getKey(),
+                  "subjectId",
+                  subject.getValue(),
+                  "reason",
+                  "Review original procedure evidence",
+                  "proposal",
+                  Map.of("semantics", "No effective replacement without validated evidence"))),
+          201);
+      var impact = api.get(lab.id(), "/corrections/" + correction + "/impact");
+      assertStatus(impact, 200);
+      assertThat(impact.body())
+          .contains("\"performedTransfers\":1", "BLOCKED_BY_DOMAIN_VALIDATION");
+    }
+    assertThat(api.get(lab.id(), "/transfers/" + transfer.id() + "/pregnancy-outcome").body())
+        .contains(check.toString(), "PREGNANT");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM embryo_transfer WHERE organization_id=? AND id=?",
+                Integer.class,
+                lab.id(),
+                transfer.id()))
+        .isEqualTo(1);
   }
 
   @Test
