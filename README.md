@@ -121,6 +121,10 @@ cp .env.example .env
 docker compose up --build
 ```
 
+`.env.example` selects `compose.dev.yaml` through `COMPOSE_FILE`; the base
+`compose.yaml` does not start the local OAuth mock. If you already have an
+older `.env`, add `COMPOSE_FILE=compose.yaml:compose.dev.yaml` to it.
+
 The default local URLs are:
 
 - API readiness: http://localhost:8080/actuator/health/readiness
@@ -215,7 +219,7 @@ token is rejected, verify that the mock is healthy, obtain a fresh token, and
 check that its issuer matches the local settings. If ports are occupied,
 adjust `API_PORT`/`POSTGRES_PORT` or stop the conflicting process.
 
-Production deployments must not use the local Compose override. The `prod`
+Production deployments must not opt into `compose.dev.yaml`. The `prod`
 profile disables Swagger by default, rejects local issuer/JWKS/CORS settings,
 and leaves bootstrap disabled unless explicitly configured for a trusted
 identity. The mock issuer and `dev-token` helper are not part of the API image.
