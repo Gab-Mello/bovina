@@ -13,14 +13,16 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {"springdoc.api-docs.enabled=true", "springdoc.swagger-ui.enabled=true"})
-class SecuredApiDocumentationIT {
+    properties = "bovina.cors.allowed-origins=http://localhost:5173,http://localhost:3000")
+@ActiveProfiles("dev")
+class LocalDevelopmentSecurityIT {
   private static final TrustedTokens TOKENS = new TrustedTokens();
   @LocalServerPort int port;
 
@@ -37,12 +39,9 @@ class SecuredApiDocumentationIT {
   }
 
   @Test
-  void validAuthenticationRevealsTheClientContractWithoutInternalPartyResources() throws Exception {
-    var response =
-        get(
-            "/v3/api-docs",
-            TOKENS.token(
-                TOKENS.issuer().toString(), "bovina-test", Instant.now().plusSeconds(300)));
+  void anonymousDocumentationRevealsTheClientContractWithoutInternalPartyResources()
+      throws Exception {
+    var response = get("/v3/api-docs", null);
     assertThat(response.statusCode()).isEqualTo(200);
     assertThat(JsonMapper.builder().build().readTree(response.body()).path("openapi").asString())
         .startsWith("3.");
@@ -55,17 +54,13 @@ class SecuredApiDocumentationIT {
             "/api/v1/data-quality",
             "/api/v1/audit-events")
         .doesNotContain("/parties", "/fivs", "/bulls");
-    assertThat(
-            get(
-                    "/swagger-ui/index.html",
-                    TOKENS.token(
-                        TOKENS.issuer().toString(), "bovina-test", Instant.now().plusSeconds(300)))
-                .statusCode())
-        .isEqualTo(200);
+    assertThat(get("/swagger-ui/index.html", null).statusCode()).isEqualTo(200);
+    assertThat(get("/swagger-ui.html", null).statusCode()).isEqualTo(302);
   }
 
   @Test
-  void rejectsMissingInvalidExpiredWrongIssuerAndWrongAudienceTokens() throws Exception {
+  void protectedApiRejectsMissingInvalidExpiredWrongIssuerAndWrongAudienceTokens()
+      throws Exception {
     assertUnauthorized(null);
     assertUnauthorized("malformed-token");
     assertUnauthorized(
@@ -77,7 +72,7 @@ class SecuredApiDocumentationIT {
   }
 
   @Test
-  void rejectsMissingRequiredClaimsAndInvalidSignature() throws Exception {
+  void protectedApiRejectsMissingRequiredClaimsAndInvalidSignature() throws Exception {
     assertUnauthorized(
         TOKENS.token(TOKENS.issuer().toString(), null, Instant.now().plusSeconds(300)));
     assertUnauthorized(TOKENS.token(TOKENS.issuer().toString(), "bovina-test", null));
@@ -91,8 +86,28 @@ class SecuredApiDocumentationIT {
     }
   }
 
+  @Test
+  void validJwtStillNeedsMembershipForTenantContext() throws Exception {
+    var token =
+        TOKENS.token(TOKENS.issuer().toString(), "bovina-test", Instant.now().plusSeconds(300));
+    assertThat(get("/api/v1/me/memberships", token).statusCode()).isEqualTo(200);
+    assertThat(get("/api/v1/me", token).statusCode()).isEqualTo(403);
+  }
+
+  @Test
+  void localFrontendOriginsCanPreflightTheApiWithoutOpeningCorsToOtherOrigins() throws Exception {
+    for (var origin : new String[] {"http://localhost:5173", "http://localhost:3000"}) {
+      var response = preflight(origin);
+      assertThat(response.statusCode()).isEqualTo(200);
+      assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).hasValue(origin);
+    }
+    var rejected = preflight("https://other.invalid");
+    assertThat(rejected.statusCode()).isEqualTo(403);
+    assertThat(rejected.headers().firstValue("Access-Control-Allow-Origin")).isEmpty();
+  }
+
   private void assertUnauthorized(String token) throws Exception {
-    var response = get("/v3/api-docs", token);
+    var response = get("/api/v1/me/memberships", token);
     assertThat(response.statusCode()).isEqualTo(401);
     assertThat(response.headers().firstValue("Content-Type")).hasValue("application/problem+json");
     var body = JsonMapper.builder().build().readTree(response.body());
@@ -100,6 +115,19 @@ class SecuredApiDocumentationIT {
     assertThat(body.path("traceId").asString())
         .isEqualTo(response.headers().firstValue("X-Correlation-ID").orElseThrow());
     assertThat(response.body()).doesNotContain("malformed-token", "untrusted.invalid");
+  }
+
+  private HttpResponse<String> preflight(String origin) throws Exception {
+    var request =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/clients"))
+            .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+            .header("Origin", origin)
+            .header("Access-Control-Request-Method", "POST")
+            .header("Access-Control-Request-Headers", "authorization,x-organization-id")
+            .build();
+    try (var client = HttpClient.newHttpClient()) {
+      return client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
   }
 
   private HttpResponse<String> get(String path, String token) throws Exception {

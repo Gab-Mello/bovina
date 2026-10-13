@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+response="$(curl --fail --silent --show-error --max-time 10 \
+  --user 'bovina-local:' \
+  --data-urlencode 'grant_type=client_credentials' \
+  http://localhost:8090/default/token)"
+
+if [[ "$response" =~ \"access_token\"[[:space:]]*:[[:space:]]*\"([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\" ]]; then
+  printf '%s\n' "${BASH_REMATCH[1]}"
+else
+  printf 'dev-auth did not return a JWT access_token\n' >&2
+  exit 1
+fi

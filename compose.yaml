@@ -27,7 +27,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: ${BOVINA_PROFILE:-dev}
+      SPRING_PROFILES_ACTIVE: ${BOVINA_PROFILE:?Set the runtime profile explicitly}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bovina
       SPRING_DATASOURCE_USERNAME: bovina_runtime
       SPRING_DATASOURCE_PASSWORD: ${BOVINA_RUNTIME_PASSWORD:?Set the runtime password}

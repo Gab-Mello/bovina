@@ -12,15 +12,21 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.SQLException;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("prod")
@@ -30,6 +36,7 @@ class ApplicationRuntimeIT {
   @Autowired Flyway flyway;
   @Autowired MeterRegistry metrics;
   @Autowired Clock clock;
+  @MockitoBean JwtDecoder jwtDecoder;
 
   @DynamicPropertySource
   static void database(DynamicPropertyRegistry registry) {
@@ -53,6 +60,23 @@ class ApplicationRuntimeIT {
     assertThat(get("/actuator/health/liveness").statusCode()).isEqualTo(200);
     assertThat(get("/actuator/health/readiness").statusCode()).isEqualTo(200);
     assertThat(get("/api/v1/clients").statusCode()).isEqualTo(401);
+  }
+
+  @Test
+  void productionDoesNotServeApiDocumentationEvenToAuthenticatedCallers() throws Exception {
+    var token = "authenticated-docs-check";
+    Mockito.when(jwtDecoder.decode(token))
+        .thenReturn(
+            Jwt.withTokenValue(token)
+                .header("alg", "RS256")
+                .claim("iss", "https://identity.invalid")
+                .claim("sub", "docs-check")
+                .claim("aud", List.of("bovina-test"))
+                .issuedAt(Instant.parse("2026-01-01T00:00:00Z"))
+                .expiresAt(Instant.parse("2030-01-01T00:00:00Z"))
+                .build());
+    assertThat(get("/v3/api-docs", token).statusCode()).isEqualTo(404);
+    assertThat(get("/swagger-ui/index.html", token).statusCode()).isEqualTo(404);
   }
 
   @Test
@@ -81,10 +105,14 @@ class ApplicationRuntimeIT {
   }
 
   private HttpResponse<String> get(String path) throws Exception {
+    return get(path, null);
+  }
+
+  private HttpResponse<String> get(String path, String token) throws Exception {
+    var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET();
+    if (token != null) request.header("Authorization", "Bearer " + token);
     try (var client = HttpClient.newHttpClient()) {
-      return client.send(
-          HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET().build(),
-          HttpResponse.BodyHandlers.ofString());
+      return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
   }
 }
