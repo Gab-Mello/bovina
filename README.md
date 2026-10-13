@@ -64,30 +64,37 @@ The API and mock issuer are published only on host loopback. The API container
 fetches public signing keys at `http://dev-auth:8080/default/jwks` on the
 Compose network; `localhost` inside that container is **not** the host.
 
-### Obtain a development token
+### Frontend quick start
 
 ```bash
 JWT="$(./scripts/dev-token)"
 ```
 
-The helper prints a signed access token valid for about one hour, with
-`iss=http://localhost:8090/default`, `sub=dev-operator`, and `aud=bovina`.
-Paste it into Swagger's **Authorize** dialog or send it as
-`Authorization: Bearer <JWT>`. Run the helper again after expiration or
-recreating the mock container. The helper uses the mock's
-`client_credentials` endpoint only as a **local token-issuance convenience**;
-it is not a user-login design for the SPA. Real browser login will use
-Authorization Code + PKCE with a real identity provider.
+On a fresh database, bootstrap the first organization once using the request
+below and save its `organizationId`. For normal tenant-scoped requests from
+`http://localhost:5173` or `http://localhost:3000`, the frontend needs
+`API_BASE_URL=http://localhost:8080` and these headers:
+
+```http
+Authorization: Bearer <JWT>
+X-Organization-ID: <organizationId>
+```
+
+In Swagger's **Authorize** dialog, paste only the JWT value (`eyJ...`), **not**
+`Bearer eyJ...`; its HTTP bearer scheme adds the prefix. The local token expires
+after about one hour; run `./scripts/dev-token` again to renew it. Its local
+`client_credentials` grant is a development convenience, not the SPA login
+flow. Real browser login will use Authorization Code + PKCE with a real
+identity provider.
 
 Swagger is anonymous only under the `dev` profile. `/api/**` remains
 authenticated, and a token alone does not grant membership or tenant access.
 
 ### Bootstrap the first organization
 
-On a fresh local database, issue a token and create the first organization:
+On a fresh local database, use the token above to create the first organization:
 
 ```bash
-JWT="$(./scripts/dev-token)"
 curl --fail-with-body -X POST http://localhost:8080/api/v1/bootstrap/organizations \
   -H "Authorization: Bearer $JWT" \
   -H 'Content-Type: application/json' \
@@ -122,10 +129,7 @@ curl --fail-with-body http://localhost:8080/api/v1/me \
   -H 'X-Organization-ID: <organizationId>'
 ```
 
-A frontend normally needs only `API_BASE_URL=http://localhost:8080`, the
-short-lived JWT, and `ORGANIZATION_ID`. CORS allows the exact local origins
-`http://localhost:5173` and `http://localhost:3000`; it does not enable
-browser credentials or wildcard origins.
+Local CORS does not enable browser credentials or wildcard origins.
 
 ### Stop, reset, and troubleshoot
 
