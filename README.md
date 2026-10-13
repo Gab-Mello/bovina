@@ -104,269 +104,121 @@ The system follows a layered backend architecture:
 
   * Represent request and response objects used by the API.
 
-## Running the project
+## Local backend for frontend development
 
-There are two main ways to run the backend locally:
+This Compose setup is for **local development only**. It runs PostgreSQL, the API, and a
+mock OAuth2/OIDC issuer; the API still validates signed JWTs and enforces real
+membership, RBAC, and tenant isolation.
 
-1. **Full Docker workflow**
+### Start
 
-   * Runs both MySQL and the Spring Boot API with Docker Compose.
-
-2. **Local Java workflow**
-
-   * Runs only MySQL with Docker Compose and starts the API locally with Maven or an IDE.
-
-## Option 1 — Run the full stack with Docker
-
-### Prerequisites
-
-* Docker 24+
-* Docker Compose v2 plugin
-
-Use the modern Compose command:
+Docker with the Compose v2 plugin and curl are required. From the repository root:
 
 ```bash
-docker compose
-```
-
-not the legacy:
-
-```bash
-docker-compose
-```
-
-### Start the full stack
-
-From the repository root:
-
-```bash
+cp .env.example .env
+# Set three distinct local passwords in .env:
+# POSTGRES_PASSWORD, BOVINA_MIGRATION_PASSWORD, BOVINA_RUNTIME_PASSWORD
 docker compose up --build
 ```
 
-This starts:
+The default local URLs are:
 
-* MySQL on port `3306`
-* BovInA API on port `8080`
+- API readiness: http://localhost:8080/actuator/health/readiness
+- Swagger UI: http://localhost:8080/swagger-ui.html
+- Local token issuer: http://localhost:8090/default
 
-After the application starts, verify it with:
+The API and mock issuer are published only on host loopback. The API container
+fetches public signing keys at `http://dev-auth:8080/default/jwks` on the
+Compose network; `localhost` inside that container is **not** the host.
+
+### Obtain a development token
 
 ```bash
-curl http://localhost:8080/actuator/health
+JWT="$(./scripts/dev-token)"
 ```
 
-Expected response:
+The helper prints a signed access token valid for about one hour, with
+`iss=http://localhost:8090/default`, `sub=dev-operator`, and `aud=bovina`.
+Paste it into Swagger's **Authorize** dialog or send it as
+`Authorization: Bearer <JWT>`. Run the helper again after expiration or
+recreating the mock container. The helper uses the mock's
+`client_credentials` endpoint only as a **local token-issuance convenience**;
+it is not a user-login design for the SPA. Real browser login will use
+Authorization Code + PKCE with a real identity provider.
 
-```json
-{
-  "status": "UP"
-}
+Swagger is anonymous only under the `dev` profile. `/api/**` remains
+authenticated, and a token alone does not grant membership or tenant access.
+
+### Bootstrap the first organization
+
+On a fresh local database, issue a token and create the first organization:
+
+```bash
+JWT="$(./scripts/dev-token)"
+curl --fail-with-body -X POST http://localhost:8080/api/v1/bootstrap/organizations \
+  -H "Authorization: Bearer $JWT" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "id": "0199da2a-6e00-7000-8000-000000000001",
+    "legalName": "Local Development Lab",
+    "taxId": "LOCAL-001",
+    "timezone": "America/Sao_Paulo"
+  }'
 ```
 
-Swagger UI is available at:
+The response's `id` is the `organizationId`. The API, not the mock issuer, creates
+`UserAccount` and the `ORG_ADMIN` membership for this bootstrap identity.
+Use a **fresh UUIDv7** for each new organization; the sample ID is suitable
+only for a first run. Relevant client-generated command/resource IDs throughout
+the API also require UUIDv7. Browser `crypto.randomUUID()` generates UUIDv4
+and is not suitable for those fields. Send `Idempotency-Key` for commands
+whose OpenAPI contract requires it.
 
-```text
-http://localhost:8080/swagger-ui.html
+To discover organizations later:
+
+```bash
+curl --fail-with-body http://localhost:8080/api/v1/me/memberships \
+  -H "Authorization: Bearer $JWT"
 ```
 
-### Stop the containers
+For tenant-scoped requests, select an organization explicitly:
+
+```bash
+curl --fail-with-body http://localhost:8080/api/v1/me \
+  -H "Authorization: Bearer $JWT" \
+  -H 'X-Organization-ID: <organizationId>'
+```
+
+A frontend normally needs only `API_BASE_URL=http://localhost:8080`, the
+short-lived JWT, and `ORGANIZATION_ID`. CORS allows the exact local origins
+`http://localhost:5173` and `http://localhost:3000`; it does not enable
+browser credentials or wildcard origins.
+
+### Stop, reset, and troubleshoot
 
 ```bash
 docker compose down
 ```
 
-This stops and removes the containers, but keeps the MySQL data volume.
-
-### Reset the local database
+This stops the stack **without deleting** PostgreSQL data. To erase local data
+and bootstrap again from an empty database:
 
 ```bash
 docker compose down -v
 ```
 
-The `-v` flag removes the MySQL volume. The next `docker compose up` starts with a fresh database.
-
-## Option 2 — Run MySQL with Docker and the API locally
-
-This workflow is useful when developing through IntelliJ IDEA or running the application with Maven.
-
-### Start only MySQL
-
-```bash
-docker compose up mysql
-```
-
-MySQL will be available on:
-
-```text
-localhost:3306
-```
-
-### Build the application
-
-```bash
-./mvnw clean package
-```
-
-This produces:
-
-```text
-target/pive-0.0.1-SNAPSHOT.jar
-```
-
-### Run the application locally
-
-```bash
-./mvnw spring-boot:run
-```
-
-By default, the application connects to:
-
-```text
-jdbc:mysql://localhost:3306/pivedatabase
-```
-
-using:
-
-```text
-username: root
-password: 123
-```
-
-These defaults match the local MySQL configuration provided by `compose.yaml`.
-
-## Docker notes
-
-The Docker setup in this repository is intended for **local development and manual API testing**.
-
-It is not a production deployment setup.
-
-The Compose file uses development-friendly defaults, such as a local MySQL container and plaintext credentials. Production deployments should use proper secrets management, stricter database users, TLS, monitoring, backups, and infrastructure-specific configuration.
-
-### Exposed ports
-
-| Service | Container port | Host port |
-| ------- | -------------: | --------: |
-| `api`   |           8080 |      8080 |
-| `mysql` |           3306 |      3306 |
-
-### Important container networking detail
-
-Inside Docker Compose, the API container connects to MySQL using the Compose service name:
-
-```text
-jdbc:mysql://mysql:3306/pivedatabase
-```
-
-It should not use:
-
-```text
-jdbc:mysql://localhost:3306/pivedatabase
-```
-
-because `localhost` inside a container refers to the container itself, not to the MySQL container.
-
-## Environment variables
-
-All per-environment configuration can be overridden through environment variables.
-
-Defaults are development-friendly. Production deployments should define values explicitly.
-
-### Database
-
-| Variable      | Default                                    | Description          |
-| ------------- | ------------------------------------------ | -------------------- |
-| `DB_URL`      | `jdbc:mysql://localhost:3306/pivedatabase` | JDBC connection URL. |
-| `DB_USERNAME` | `root`                                     | Database username.   |
-| `DB_PASSWORD` | `123`                                      | Database password.   |
-
-When running with Docker Compose, the API container overrides `DB_URL` to use the MySQL service name:
-
-```text
-jdbc:mysql://mysql:3306/pivedatabase
-```
-
-### JPA / Hibernate
-
-| Variable       | Default  | Description                                                                                                  |
-| -------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `JPA_DDL_AUTO` | `update` | Hibernate schema-management mode. Production should use `validate` or `none` after a proper schema baseline. |
-| `JPA_SHOW_SQL` | `true`   | Enables SQL logging. Recommended to set `false` in production.                                               |
-
-### API / CORS
-
-| Variable              | Default                 | Description                                       |
-| --------------------- | ----------------------- | ------------------------------------------------- |
-| `BOVINA_CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed frontend origins. |
-
-### Error responses
-
-| Property                     | Default | Description                                                                                                                                |
-| ---------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bovina.error.legacy-format` | `true`  | When `true`, error responses use the legacy raw-string format. When `false`, error responses use structured RFC 7807 `ProblemDetail` JSON. |
-
-## Spring profiles
-
-### Default profile
-
-The default profile keeps compatibility with the original application behavior:
-
-* Legacy raw-string error responses.
-* Development-friendly database defaults.
-* SQL logging enabled by default.
-
-### Dev profile
-
-The `dev` profile enables newer development behavior, such as structured error responses using `ProblemDetail`.
-
-Activate it with:
-
-```bash
-SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run
-```
-
-or:
-
-```bash
-./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
-```
-
-The Docker Compose API service uses the `dev` profile by default.
-
-## Troubleshooting
-
-### Port already allocated
-
-If Docker fails with a message like:
-
-```text
-port is already allocated
-```
-
-another process is already using port `8080` or `3306`.
-
-You can either stop the competing process or change the host port mapping in `compose.yaml`.
-
-For example:
-
-```yaml
-ports:
-  - "8081:8080"
-```
-
-### First Docker build is slow
-
-The first Docker build may take a few minutes because Docker needs to download base images and Maven dependencies.
-
-Subsequent builds are faster because Docker reuses cached layers.
-
-### API cannot connect to MySQL in Docker
-
-Make sure the API container uses:
-
-```text
-jdbc:mysql://mysql:3306/pivedatabase
-```
-
-Inside Docker, `mysql` is the Compose service name.
+Changing PostgreSQL passwords in `.env` after the volume was initialized
+does **not** recreate database users. Keep the original passwords or reset the
+local volume if its data can be discarded. A missing `POSTGRES_PASSWORD` (or
+either application DB password) means `.env` has not been filled in. If a
+token is rejected, verify that the mock is healthy, obtain a fresh token, and
+check that its issuer matches the local settings. If ports are occupied,
+adjust `API_PORT`/`POSTGRES_PORT` or stop the conflicting process.
+
+Production deployments must not use the local Compose override. The `prod`
+profile disables Swagger by default, rejects local issuer/JWKS/CORS settings,
+and leaves bootstrap disabled unless explicitly configured for a trusted
+identity. The mock issuer and `dev-token` helper are not part of the API image.
 
 ## Refactoring note
 
