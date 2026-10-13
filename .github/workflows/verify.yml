@@ -3,7 +3,7 @@ name: Verify
 on:
   pull_request:
   push:
-    branches: [feature/pive-domain-v2, master]
+    branches: [feature/pive-domain-v2, main]
   workflow_dispatch:
 
 permissions:
