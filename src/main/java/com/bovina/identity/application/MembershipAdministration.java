@@ -8,6 +8,7 @@ import com.bovina.identity.infrastructure.IdentityStore;
 import com.bovina.platform.application.*;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -99,6 +100,63 @@ public class MembershipAdministration {
             "REVOKED"));
   }
 
+  @Transactional
+  public ReactivatedMembership reactivate(
+      ExecutionContext context, UUID membershipId, ReactivateMembership command) {
+    access.require(context, "membership:manage");
+    var membership =
+        identities
+            .membership(context.tenantId(), membershipId)
+            .orElseThrow(
+                () ->
+                    new ApplicationFailure(
+                        ApplicationFailure.Kind.NOT_FOUND,
+                        "MEMBERSHIP_NOT_FOUND",
+                        "Membership not found"));
+    if (membership.version() != command.expectedVersion())
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT, "STALE_VERSION", "Membership version has changed");
+    if (command.reason() == null || command.reason().isBlank() || command.reason().length() > 500)
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.REJECTED, "REASON_REQUIRED", "A reason is required");
+    var before = auditState(membership);
+    var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+    membership.reactivate(command.role(), now, command.validUntil());
+    identities.flush();
+    audit.record(
+        new AuditEvent(
+            ids.next(),
+            context,
+            now,
+            "REACTIVATE",
+            "MEMBERSHIP",
+            membership.id(),
+            membership.version(),
+            command.reason(),
+            before,
+            auditState(membership)));
+    return new ReactivatedMembership(
+        membership.id(),
+        membership.version(),
+        membership.role(),
+        membership.validFrom(),
+        membership.validUntil());
+  }
+
+  private static String auditState(OrganizationMembership membership) {
+    return membership.status().name()
+        + "/"
+        + membership.role().name()
+        + "/"
+        + (membership.validUntil() == null ? "OPEN" : membership.validUntil());
+  }
+
   public record GrantMembership(
       UUID id, AuthenticatedIdentity identity, MembershipRole role, Instant validUntil) {}
+
+  public record ReactivateMembership(
+      long expectedVersion, MembershipRole role, Instant validUntil, String reason) {}
+
+  public record ReactivatedMembership(
+      UUID id, long version, MembershipRole role, Instant validFrom, Instant validUntil) {}
 }

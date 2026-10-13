@@ -1,5 +1,6 @@
 package com.bovina.identity.domain;
 
+import com.bovina.platform.application.ApplicationFailure;
 import com.bovina.platform.application.StableIds;
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -70,11 +71,37 @@ public class OrganizationMembership {
     return role;
   }
 
+  public Instant validUntil() {
+    return validUntil;
+  }
+
+  public Instant validFrom() {
+    return validFrom;
+  }
+
   public Status status() {
     return status;
   }
 
   public void revoke() {
     status = Status.REVOKED;
+  }
+
+  public void reactivate(MembershipRole newRole, Instant from, Instant until) {
+    Objects.requireNonNull(from);
+    if (newRole == null || until != null && !until.isAfter(from))
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.REJECTED,
+          "INVALID_MEMBERSHIP_INTERVAL",
+          "Membership role and future expiry are required");
+    if (status == Status.ACTIVE && (validUntil == null || validUntil.isAfter(from)))
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT,
+          "MEMBERSHIP_ALREADY_ACTIVE",
+          "Membership is already active");
+    role = newRole;
+    validFrom = from;
+    validUntil = until;
+    status = Status.ACTIVE;
   }
 }

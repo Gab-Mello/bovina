@@ -95,6 +95,22 @@ public class IdentityController {
     return ResponseEntity.noContent().build();
   }
 
+  @PostMapping("/memberships/{id}:reactivate")
+  @Operation(
+      summary = "Reactivate or renew an existing membership as an organization administrator")
+  public MembershipAdministration.ReactivatedMembership reactivate(
+      @AuthenticationPrincipal Jwt jwt,
+      @RequestHeader(value = "X-Organization-ID", required = false) UUID organization,
+      @PathVariable UUID id,
+      @Valid @RequestBody ReactivateRequest body,
+      HttpServletRequest request) {
+    return memberships.reactivate(
+        current.context(jwt, organization, request),
+        id,
+        new MembershipAdministration.ReactivateMembership(
+            body.expectedVersion(), body.role(), body.validUntil(), body.reason()));
+  }
+
   public record OrganizationRequest(
       @NotNull UUID id,
       @NotBlank @Size(max = 200) String legalName,
@@ -110,6 +126,12 @@ public class IdentityController {
 
   public record RevokeRequest(
       @NotNull @Min(0) Long expectedVersion, @NotBlank @Size(max = 500) String reason) {}
+
+  public record ReactivateRequest(
+      @NotNull @Min(0) Long expectedVersion,
+      @NotNull MembershipRole role,
+      Instant validUntil,
+      @NotBlank @Size(max = 500) String reason) {}
 
   public record CreatedOrganization(UUID id) {}
 

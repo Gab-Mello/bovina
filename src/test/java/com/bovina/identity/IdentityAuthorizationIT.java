@@ -20,6 +20,139 @@ class IdentityAuthorizationIT extends ClientApiIntegrationTest {
   @Autowired private CreateClientService createClient;
 
   @Test
+  void administratorReactivatesRevokedMembershipWithoutReplacingItsIdentityOrAuthorship()
+      throws Exception {
+    var tenant = tenantWithRole("OPERATOR");
+    var other = tenantWithRole("READ_ONLY");
+    var clientId = id();
+    assertThat(post(tenant, clientId, clientBody(clientId, "Authored Client")).statusCode())
+        .isEqualTo(201);
+    var path = "/api/v1/memberships/" + tenant.membership() + ":reactivate";
+    var revoke =
+        json.writeValueAsString(Map.of("expectedVersion", 0, "reason", "Temporary removal"));
+    assertThat(
+            request(
+                    "POST",
+                    "/api/v1/memberships/" + tenant.membership() + ":revoke",
+                    token("integration-bootstrap"),
+                    tenant.id(),
+                    null,
+                    revoke)
+                .statusCode())
+        .isEqualTo(204);
+    var renewal =
+        json.writeValueAsString(
+            Map.of(
+                "expectedVersion",
+                1,
+                "role",
+                "READ_ONLY",
+                "validUntil",
+                "2100-01-01T00:00:00Z",
+                "reason",
+                "Access restored with read-only role"));
+    assertThat(request("POST", path, tenant.token(), tenant.id(), null, renewal).statusCode())
+        .isEqualTo(403);
+    assertThat(request("POST", path, other.token(), other.id(), null, renewal).statusCode())
+        .isEqualTo(403);
+    assertThat(
+            request("POST", path, token("integration-bootstrap"), other.id(), null, renewal)
+                .statusCode())
+        .isEqualTo(404);
+    var stale =
+        json.writeValueAsString(
+            Map.of(
+                "expectedVersion",
+                0,
+                "role",
+                "READ_ONLY",
+                "reason",
+                "Stale administrator request"));
+    assertThat(
+            request("POST", path, token("integration-bootstrap"), tenant.id(), null, stale)
+                .statusCode())
+        .isEqualTo(409);
+
+    var result = request("POST", path, token("integration-bootstrap"), tenant.id(), null, renewal);
+    assertThat(result.statusCode()).isEqualTo(200);
+    assertThat(json.readTree(result.body()).get("id").asText())
+        .isEqualTo(tenant.membership().toString());
+    assertThat(json.readTree(result.body()).get("version").asLong()).isEqualTo(2);
+    assertThat(request("GET", "/api/v1/me", tenant.token(), tenant.id(), null, null).statusCode())
+        .isEqualTo(200);
+    assertThat(post(tenant, id(), clientBody(id(), "Now read-only")).statusCode()).isEqualTo(403);
+    assertThat(
+            jdbc.queryForMap(
+                "SELECT role,status,valid_until FROM organization_membership WHERE organization_id=? AND id=?",
+                tenant.id(),
+                tenant.membership()))
+        .containsEntry("role", "READ_ONLY")
+        .containsEntry("status", "ACTIVE");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM audit_event WHERE organization_id=? AND entity_type='CLIENT' AND entity_id=? AND actor_id=?",
+                Integer.class,
+                tenant.id(),
+                clientId,
+                tenant.actor()))
+        .isEqualTo(1);
+    assertThat(
+            jdbc.queryForMap(
+                "SELECT reason,previous_state,new_state FROM audit_event WHERE organization_id=? AND entity_type='MEMBERSHIP' AND entity_id=? AND action='REACTIVATE'",
+                tenant.id(),
+                tenant.membership()))
+        .containsEntry("reason", "Access restored with read-only role")
+        .containsEntry("new_state", "ACTIVE/READ_ONLY/2100-01-01T00:00:00Z")
+        .containsEntry("previous_state", "REVOKED/OPERATOR/OPEN");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM organization_membership WHERE organization_id=? AND user_account_id=?",
+                Integer.class,
+                tenant.id(),
+                tenant.actor()))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void administratorRenewsExpiredMembershipInPlace() throws Exception {
+    var tenant = tenantWithRole("OPERATOR");
+    jdbc.update(
+        "UPDATE organization_membership SET valid_from=now()-interval '2 days', valid_until=now()-interval '1 day' WHERE id=?",
+        tenant.membership());
+    assertThat(request("GET", "/api/v1/me", tenant.token(), tenant.id(), null, null).statusCode())
+        .isEqualTo(403);
+    var response =
+        request(
+            "POST",
+            "/api/v1/memberships/" + tenant.membership() + ":reactivate",
+            token("integration-bootstrap"),
+            tenant.id(),
+            null,
+            json.writeValueAsString(
+                Map.of(
+                    "expectedVersion", 0, "role", "OPERATOR", "reason", "Renew expired access")));
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(json.readTree(response.body()).get("id").asText())
+        .isEqualTo(tenant.membership().toString());
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT valid_until FROM organization_membership WHERE organization_id=? AND id=?",
+                java.sql.Timestamp.class,
+                tenant.id(),
+                tenant.membership()))
+        .isNull();
+    assertThat(request("GET", "/api/v1/me", tenant.token(), tenant.id(), null, null).statusCode())
+        .isEqualTo(200);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT previous_state FROM audit_event WHERE organization_id=? AND entity_type='MEMBERSHIP' AND entity_id=? AND action='REACTIVATE'",
+                String.class,
+                tenant.id(),
+                tenant.membership()))
+        .startsWith("ACTIVE/OPERATOR/");
+  }
+
+  @Test
   void readOnlyAndRevokedMembershipCannotWriteEvenWithValidJwt() throws Exception {
     var reader = tenantWithRole("READ_ONLY");
     assertThat(post(reader, id(), clientBody(id(), "Blocked")).statusCode()).isEqualTo(403);

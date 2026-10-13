@@ -7,6 +7,7 @@ import com.bovina.identity.domain.Organization;
 import com.bovina.identity.domain.OrganizationMembership;
 import com.bovina.platform.application.ApplicationFailure;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -69,6 +70,7 @@ public class IdentityStore {
             OrganizationMembership.class)
         .setParameter("tenant", tenant)
         .setParameter("id", id)
+        .setLockMode(LockModeType.PESSIMISTIC_WRITE)
         .getResultStream()
         .findFirst();
   }
