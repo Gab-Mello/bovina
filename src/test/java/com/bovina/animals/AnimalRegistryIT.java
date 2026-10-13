@@ -6,12 +6,59 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.bovina.support.TestDatabase;
+import com.bovina.support.fixture.ProductionFixtures;
+import com.bovina.support.fixture.TransferFixtures;
 import com.bovina.support.integration.AuthenticatedIntegrationTest;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class AnimalRegistryIT extends AuthenticatedIntegrationTest {
+  @Test
+  void searchDerivesSireAndRecipientRolesFromTenantScopedFacts() throws Exception {
+    var tenant = tenant("Contextual Animal Roles Lab");
+    var foreign = tenant("Foreign Contextual Roles Lab");
+    var production = ProductionFixtures.fertilizationInputs(api, tenant, 1);
+    var foreignProduction = ProductionFixtures.fertilizationInputs(api, foreign, 1);
+    var unusedMale = ProductionFixtures.animal(api, tenant.id(), "MALE", "Unused Male");
+    var unusedFemale = ProductionFixtures.animal(api, tenant.id(), "FEMALE", "Unused Female");
+    var owner = owner(api, tenant.id(), "Sire Owner");
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/animals/" + production.sire() + "/ownership",
+            Map.of("id", id(), "ownerId", owner, "period", Map.of("from", "2026-01-01"))),
+        201);
+    TransferFixtures.openCycle(api, tenant.id(), production.donor(), LocalDate.of(2026, 9, 1));
+    TransferFixtures.openCycle(
+        api, foreign.id(), foreignProduction.donor(), LocalDate.of(2026, 9, 1));
+
+    var sires = api.get(tenant.id(), "/animals?role=SIRE&size=1&q=Sire");
+    assertStatus(sires, 200);
+    assertThat(sires.body())
+        .contains(production.sire().toString())
+        .doesNotContain(unusedMale.toString(), foreignProduction.sire().toString());
+    var ownedSires =
+        api.get(tenant.id(), "/animals?role=SIRE&ownerId=" + owner + "&ownedOn=2026-09-01&size=1");
+    assertStatus(ownedSires, 200);
+    assertThat(ownedSires.body()).contains(production.sire().toString());
+    assertStatus(
+        api.get(tenant.id(), "/animals?role=SIRE&ownerId=" + owner + "&ownedOn=2025-09-01"), 200);
+    assertThat(
+            api.get(tenant.id(), "/animals?role=SIRE&ownerId=" + owner + "&ownedOn=2025-09-01")
+                .body())
+        .doesNotContain(production.sire().toString());
+
+    var recipients = api.get(tenant.id(), "/animals?role=RECIPIENT&size=1");
+    assertStatus(recipients, 200);
+    assertThat(recipients.body())
+        .contains(production.donor().toString())
+        .doesNotContain(unusedFemale.toString(), foreignProduction.donor().toString());
+    assertThat(api.get(tenant.id(), "/animals?role=DONOR&size=1").body())
+        .contains(production.donor().toString());
+  }
+
   @Test
   void activeIdentifiersAreNormalizedAndUniqueWithinTheirIssuerAndTenant() throws Exception {
     var tenant = tenant("Animal Registry Lab");

@@ -30,7 +30,11 @@ public interface AnimalRepository extends Repository<Animal, UUID> {
           AND (CAST(:ownedOn AS date) IS NULL OR (o.valid_from<=:ownedOn AND (o.valid_until IS NULL OR o.valid_until>:ownedOn)))))
       AND (CAST(:observedRole AS varchar) IS NULL OR (:observedRole='DONOR' AND EXISTS (
           SELECT 1 FROM oocyte_collection c JOIN opu_session s ON s.organization_id=c.organization_id AND s.id=c.opu_session_id
-          WHERE c.organization_id=a.organization_id AND c.donor_id=a.id AND s.status<>'CANCELLED')))
+          WHERE c.organization_id=a.organization_id AND c.donor_id=a.id AND s.status<>'CANCELLED'))
+          OR (:observedRole='SIRE' AND EXISTS (SELECT 1 FROM semen_batch b
+              WHERE b.organization_id=a.organization_id AND b.sire_id=a.id))
+          OR (:observedRole='RECIPIENT' AND EXISTS (SELECT 1 FROM recipient_cycle r
+              WHERE r.organization_id=a.organization_id AND r.recipient_animal_id=a.id)))
       ORDER BY lower(a.name) NULLS LAST,a.id
       """,
       nativeQuery = true)
