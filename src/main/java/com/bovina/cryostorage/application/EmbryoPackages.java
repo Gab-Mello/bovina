@@ -115,6 +115,8 @@ public class EmbryoPackages {
           var allEmbryos =
               embryos.lockPackageMembers(
                   c.tenantId(), all.stream().map(PackageMember::embryoId).toList());
+          if (facts.hasConsumedOrActiveMembership(c.tenantId(), itemIds))
+            throw conflict("CRYOPRESERVATION_ITEM_UNAVAILABLE");
           // Mixed custody is deliberately not certified before package policy validation.
           if (allEmbryos.values().stream()
                       .map(EmbryoCryopreservationBoundary.Member::ownerId)

@@ -5,6 +5,7 @@ import com.bovina.audit.application.AuditRecorder;
 import com.bovina.cryostorage.infrastructure.CryostorageFacts;
 import com.bovina.cryostorage.infrastructure.EmbryoPackageRepository;
 import com.bovina.cryostorage.infrastructure.InventoryStore;
+import com.bovina.embryology.application.EmbryoCryopreservationBoundary;
 import com.bovina.identity.application.TenantAccess;
 import com.bovina.operations.application.OpuFacilities;
 import com.bovina.platform.application.ApplicationFailure;
@@ -28,6 +29,7 @@ public class ThawEvents {
   private final EmbryoPackageRepository packages;
   private final CryostorageFacts members;
   private final InventoryStore store;
+  private final EmbryoCryopreservationBoundary embryos;
   private final OpuFacilities facilities;
   private final Protocols protocols;
   private final CommandReceipts receipts;
@@ -40,6 +42,7 @@ public class ThawEvents {
       EmbryoPackageRepository packages,
       CryostorageFacts members,
       InventoryStore store,
+      EmbryoCryopreservationBoundary embryos,
       OpuFacilities facilities,
       Protocols protocols,
       CommandReceipts receipts,
@@ -50,6 +53,7 @@ public class ThawEvents {
     this.packages = packages;
     this.members = members;
     this.store = store;
+    this.embryos = embryos;
     this.facilities = facilities;
     this.protocols = protocols;
     this.receipts = receipts;
@@ -93,6 +97,10 @@ public class ThawEvents {
             .filter(m -> selected.contains(m.id()))
             .toList();
     if (items.size() != selected.size()) throw rejected("PACKAGE_ITEM_NOT_ACTIVE");
+    // Package precedes Embryo in both thaw and packaging; the shared Embryo lock
+    // serializes consumption against a new membership in another package.
+    embryos.lockForThaw(
+        c.tenantId(), items.stream().map(CryostorageFacts.PackageMember::embryoId).toList());
     var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
     store.insertThaw(c, intent, withdrawal.id(), now);
     store.thawMembers(c, intent.id(), p.id(), items, now);

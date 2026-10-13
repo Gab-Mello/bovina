@@ -70,6 +70,14 @@ public class EmbryoCryopreservationBoundary {
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
+  public void lockForThaw(UUID tenant, Collection<UUID> ids) {
+    var ordered = new TreeSet<>(ids);
+    if (ordered.isEmpty()
+        || ordered.size() != ids.size()
+        || embryos.lockAll(tenant, ordered).size() != ordered.size()) throw missing();
+  }
+
+  @Transactional(propagation = Propagation.MANDATORY)
   public void discardPackageMembers(UUID tenant, Collection<UUID> ids) {
     var ordered = new TreeSet<>(ids);
     var locked = embryos.lockAll(tenant, ordered);

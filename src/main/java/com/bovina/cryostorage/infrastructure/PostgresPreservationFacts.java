@@ -37,6 +37,17 @@ public class PostgresPreservationFacts implements PreservationFacts {
   }
 
   @Override
+  public boolean hasActivePackageMembership(UUID tenant, UUID embryoId) {
+    return Boolean.TRUE.equals(
+        jdbc.getJdbcTemplate()
+            .queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM package_item WHERE organization_id=? AND embryo_id=? AND removed_at IS NULL)",
+                Boolean.class,
+                tenant,
+                embryoId));
+  }
+
+  @Override
   public State state(UUID tenant, UUID embryoId) {
     var rows =
         jdbc.getJdbcTemplate()

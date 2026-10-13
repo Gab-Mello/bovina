@@ -53,6 +53,11 @@ public class EmbryoTransferBoundary {
     if (facts.hasActiveHold(tenant, embryo.id()))
       throw new ApplicationFailure(
           ApplicationFailure.Kind.CONFLICT, "EMBRYO_ON_HOLD", "Embryo has an active hold");
+    if (preservation.hasActivePackageMembership(tenant, embryo.id()))
+      throw new ApplicationFailure(
+          ApplicationFailure.Kind.CONFLICT,
+          "EMBRYO_STILL_PACKAGED",
+          "Thawed embryo still has an active package membership");
     if (!preservation.cryopreservedEmbryos(tenant, List.of(embryo.id())).contains(embryo.id()))
       throw new ApplicationFailure(
           ApplicationFailure.Kind.CONFLICT,

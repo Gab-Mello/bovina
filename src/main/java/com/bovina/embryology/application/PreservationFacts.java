@@ -14,6 +14,8 @@ public interface PreservationFacts {
 
   ThawEvidence thawEvidence(UUID tenant, UUID thawEventId, UUID embryoId);
 
+  boolean hasActivePackageMembership(UUID tenant, UUID embryoId);
+
   State state(UUID tenant, UUID embryoId);
 
   Map<UUID, State> states(UUID tenant, Collection<UUID> embryoIds);

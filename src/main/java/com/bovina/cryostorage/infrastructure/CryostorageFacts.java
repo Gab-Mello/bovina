@@ -107,6 +107,21 @@ public class CryostorageFacts {
         });
   }
 
+  public boolean hasConsumedOrActiveMembership(UUID tenant, Collection<UUID> itemIds) {
+    if (itemIds.isEmpty()) return false;
+    var placeholders = String.join(",", java.util.Collections.nCopies(itemIds.size(), "?"));
+    var values = new ArrayList<Object>();
+    values.add(tenant);
+    values.addAll(itemIds);
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "SELECT EXISTS (SELECT 1 FROM cryopreservation_item i WHERE i.organization_id=? AND i.id IN ("
+                + placeholders
+                + ") AND (EXISTS (SELECT 1 FROM package_item p WHERE p.organization_id=i.organization_id AND p.cryopreservation_item_id=i.id AND p.removed_at IS NULL) OR EXISTS (SELECT 1 FROM thaw_event_item t JOIN package_item p ON p.organization_id=t.organization_id AND p.id=t.package_item_id WHERE t.organization_id=i.organization_id AND p.cryopreservation_item_id=i.id)))",
+            Boolean.class,
+            values.toArray()));
+  }
+
   public List<PackageMember> activeMembers(UUID tenant, UUID packageId) {
     return jdbc.query(
         "SELECT id,cryopreservation_item_id,embryo_id,position_code FROM package_item WHERE organization_id=? AND package_id=? AND removed_at IS NULL ORDER BY id",
