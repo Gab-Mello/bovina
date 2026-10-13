@@ -84,7 +84,9 @@ public class EmbryoCryopreservationBoundary {
     if (locked.size() != ordered.size()) throw missing();
     for (var embryo : locked) {
       if (facts.hasActiveHold(tenant, embryo.id())) throw conflict("EMBRYO_ON_HOLD");
-      embryo.discard();
+      if (embryo.availability() == Embryo.AvailabilityStatus.AVAILABLE) embryo.discard();
+      else if (embryo.availability() != Embryo.AvailabilityStatus.DISCARDED)
+        throw conflict("EMBRYO_NOT_DISCARDABLE");
     }
     embryos.flush();
   }
