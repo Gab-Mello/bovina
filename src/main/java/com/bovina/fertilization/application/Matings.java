@@ -217,7 +217,8 @@ public class Matings {
   public EmbryologyCapacity lockForEmbryology(UUID tenant, UUID id) {
     var mating = find(tenant, id, true);
     mating.requireEmbryologyOpen();
-    return new EmbryologyCapacity(mating.id(), mating.allocatedOocytes(), mating.version());
+    return new EmbryologyCapacity(
+        mating.id(), mating.allocatedOocytes(), mating.fertilizedAt(), mating.version());
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
@@ -251,7 +252,8 @@ public class Matings {
 
   public record CorrectionView(UUID id, UUID matingId, String status, Instant requestedAt) {}
 
-  public record EmbryologyCapacity(UUID matingId, int allocatedOocytes, long version) {}
+  public record EmbryologyCapacity(
+      UUID matingId, int allocatedOocytes, Instant fertilizedAt, long version) {}
 
   private record CorrectionIntent(UUID matingId, Correction correction) {}
 }

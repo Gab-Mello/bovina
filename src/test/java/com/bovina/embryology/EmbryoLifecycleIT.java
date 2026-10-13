@@ -15,6 +15,145 @@ import org.junit.jupiter.api.Test;
 
 class EmbryoLifecycleIT extends AuthenticatedIntegrationTest {
   @Test
+  void identificationRejectsPreFertilizationDatesAtomicallyAndAcceptsEqualOrLaterDates()
+      throws Exception {
+    var tenant = tenant("Embryo Chronology Lab");
+    var inputs = ProductionFixtures.fertilizationInputs(api, tenant, 3);
+    var mating = id();
+    var matingBatch = id();
+    var fertilizedAt = Instant.parse("2026-09-01T10:00:00Z");
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/matings:bulk",
+            matingBatch,
+            Map.of(
+                "batchId",
+                matingBatch,
+                "items",
+                List.of(
+                    Map.of(
+                        "itemId",
+                        id(),
+                        "id",
+                        mating,
+                        "collectionId",
+                        inputs.collection(),
+                        "semenBatchId",
+                        inputs.semenBatch(),
+                        "allocatedOocytes",
+                        3,
+                        "fertilizedAt",
+                        fertilizedAt,
+                        "method",
+                        "IVF",
+                        "responsibleProfessionalId",
+                        inputs.professional())))),
+        200);
+    var firstEmbryo = id();
+    var invalidEmbryo = id();
+    var invalidBatch = id();
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/embryos:bulk",
+            invalidBatch,
+            Map.of(
+                "batchId",
+                invalidBatch,
+                "items",
+                List.of(
+                    Map.of(
+                        "itemId",
+                        id(),
+                        "id",
+                        firstEmbryo,
+                        "matingId",
+                        mating,
+                        "humanCode",
+                        "CHRONOLOGY-EQUAL",
+                        "identifiedAt",
+                        fertilizedAt),
+                    Map.of(
+                        "itemId",
+                        id(),
+                        "id",
+                        invalidEmbryo,
+                        "matingId",
+                        mating,
+                        "humanCode",
+                        "CHRONOLOGY-BEFORE",
+                        "identifiedAt",
+                        fertilizedAt.minusNanos(1_000))))),
+        422);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM embryo WHERE organization_id=? AND mating_id=?",
+                Integer.class,
+                tenant.id(),
+                mating))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM audit_event WHERE organization_id=? AND entity_type='EMBRYO' AND entity_id IN (?,?)",
+                Integer.class,
+                tenant.id(),
+                firstEmbryo,
+                invalidEmbryo))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM idempotent_command WHERE organization_id=? AND command_type='IDENTIFY_EMBRYOS_V1' AND idempotency_key=?",
+                Integer.class,
+                tenant.id(),
+                invalidBatch))
+        .isZero();
+
+    var laterEmbryo = id();
+    var validBatch = id();
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/embryos:bulk",
+            validBatch,
+            Map.of(
+                "batchId",
+                validBatch,
+                "items",
+                List.of(
+                    Map.of(
+                        "itemId",
+                        id(),
+                        "id",
+                        firstEmbryo,
+                        "matingId",
+                        mating,
+                        "humanCode",
+                        "CHRONOLOGY-EQUAL",
+                        "identifiedAt",
+                        fertilizedAt),
+                    Map.of(
+                        "itemId",
+                        id(),
+                        "id",
+                        laterEmbryo,
+                        "matingId",
+                        mating,
+                        "humanCode",
+                        "CHRONOLOGY-LATER",
+                        "identifiedAt",
+                        fertilizedAt.plusNanos(1_000))))),
+        200);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM embryo WHERE organization_id=? AND mating_id=?",
+                Integer.class,
+                tenant.id(),
+                mating))
+        .isEqualTo(2);
+  }
+
+  @Test
   void evaluationsDispositionAndHoldRemainOrthogonalAndHistoricallyImmutable() throws Exception {
     var production = ProductionFixtures.freshEmbryos(api, tenant("Embryo Assessment Lab"), 3, 2);
     var embryo = production.embryos().getFirst();

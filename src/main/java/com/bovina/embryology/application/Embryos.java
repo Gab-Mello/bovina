@@ -97,6 +97,15 @@ public class Embryos {
         .distinct()
         .sorted()
         .forEach(id -> matingById.put(id, matings.lockForEmbryology(c.tenantId(), id)));
+    for (var item : batch.items()) {
+      if (item.identifiedAt() == null
+          || item.identifiedAt()
+              .truncatedTo(ChronoUnit.MICROS)
+              .isBefore(matingById.get(item.matingId()).fertilizedAt()))
+        throw rejected(
+            "EMBRYO_IDENTIFIED_BEFORE_FERTILIZATION",
+            "Embryo identification cannot precede fertilization");
+    }
     var requested = new HashMap<UUID, Long>();
     for (var item : batch.items()) requested.merge(item.matingId(), 1L, Long::sum);
     requested.forEach(
