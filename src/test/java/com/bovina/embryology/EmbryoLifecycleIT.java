@@ -15,6 +15,90 @@ import org.junit.jupiter.api.Test;
 
 class EmbryoLifecycleIT extends AuthenticatedIntegrationTest {
   @Test
+  void dispositionQuantitiesCannotWrapAroundAndCompleteMatingAsZero() throws Exception {
+    var tenant = tenant("Disposition Reconciliation Lab");
+    var inputs = ProductionFixtures.fertilizationInputs(api, tenant, 1);
+    var mating = id();
+    var matingBatch = id();
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/matings:bulk",
+            matingBatch,
+            Map.of(
+                "batchId",
+                matingBatch,
+                "items",
+                List.of(
+                    Map.of(
+                        "itemId",
+                        id(),
+                        "id",
+                        mating,
+                        "collectionId",
+                        inputs.collection(),
+                        "semenBatchId",
+                        inputs.semenBatch(),
+                        "allocatedOocytes",
+                        1,
+                        "fertilizedAt",
+                        Instant.EPOCH,
+                        "method",
+                        "IVF",
+                        "responsibleProfessionalId",
+                        inputs.professional())))),
+        200);
+    var completionKey = id();
+    var dispositions =
+        List.of(
+            Map.of("id", id(), "code", "NOT_INDIVIDUALIZED", "quantity", Integer.MAX_VALUE),
+            Map.of("id", id(), "code", "NOT_INDIVIDUALIZED", "quantity", Integer.MAX_VALUE),
+            Map.of("id", id(), "code", "NOT_INDIVIDUALIZED", "quantity", 2));
+    assertStatus(
+        api.post(
+            tenant.id(),
+            "/matings/" + mating + ":complete-embryology",
+            completionKey,
+            Map.of("expectedVersion", 0, "producedCount", 0, "dispositions", dispositions)),
+        422);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM aggregate_embryo_disposition WHERE organization_id=? AND mating_id=?",
+                Integer.class,
+                tenant.id(),
+                mating))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM mating_completion WHERE organization_id=? AND mating_id=?",
+                Integer.class,
+                tenant.id(),
+                mating))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM audit_event WHERE organization_id=? AND entity_type='MATING' AND entity_id=? AND action='COMPLETE'",
+                Integer.class,
+                tenant.id(),
+                mating))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM idempotent_command WHERE organization_id=? AND command_type='COMPLETE_MATING_EMBRYOLOGY_V1' AND idempotency_key=?",
+                Integer.class,
+                tenant.id(),
+                completionKey))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT status FROM mating WHERE organization_id=? AND id=?",
+                String.class,
+                tenant.id(),
+                mating))
+        .isEqualTo("FERTILIZED");
+  }
+
+  @Test
   void identificationRejectsPreFertilizationDatesAtomicallyAndAcceptsEqualOrLaterDates()
       throws Exception {
     var tenant = tenant("Embryo Chronology Lab");

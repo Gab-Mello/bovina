@@ -62,16 +62,25 @@ public class CompleteMating {
           for (var d : dispositions)
             if (!idsSeen.add(d.id()))
               throw rejected("DUPLICATE_DISPOSITION_ID", "Disposition IDs must be distinct");
-          var individualized = Math.toIntExact(facts.embryoCount(c.tenantId(), matingId));
+          var individualizedCount = facts.embryoCount(c.tenantId(), matingId);
           var aggregate =
-              dispositions.stream().mapToInt(EmbryologyFacts.Disposition::quantity).sum();
-          if (command.producedCount() != individualized + aggregate)
+              dispositions.stream().mapToLong(EmbryologyFacts.Disposition::quantity).sum();
+          if (command.producedCount() != individualizedCount + aggregate)
             throw rejected(
                 "EMBRYO_RECONCILIATION_MISMATCH",
                 "Produced count must equal individualized embryos plus aggregate dispositions");
+          var individualized = Math.toIntExact(individualizedCount);
+          var aggregateCount = Math.toIntExact(aggregate);
           var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
           facts.complete(
-              c.tenantId(), matingId, command.producedCount(), dispositions, c.actorId(), now);
+              c.tenantId(),
+              matingId,
+              command.producedCount(),
+              individualized,
+              aggregateCount,
+              dispositions,
+              c.actorId(),
+              now);
           matings.completeEmbryology(c.tenantId(), matingId, mating.version());
           audit.record(
               new AuditEvent(
@@ -86,7 +95,7 @@ public class CompleteMating {
                   "FERTILIZED",
                   "COMPLETED"));
           return new Result(
-              matingId, command.producedCount(), individualized, aggregate, "COMPLETED", now);
+              matingId, command.producedCount(), individualized, aggregateCount, "COMPLETED", now);
         });
   }
 

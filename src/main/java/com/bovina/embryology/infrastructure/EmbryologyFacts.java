@@ -252,6 +252,8 @@ public class EmbryologyFacts {
       UUID tenant,
       UUID mating,
       int produced,
+      int individualized,
+      int aggregate,
       List<Disposition> dispositions,
       UUID actor,
       Instant now) {
@@ -269,8 +271,6 @@ public class EmbryologyFacts {
           ps.setObject(7, actor);
           ps.setTimestamp(8, Timestamp.from(now));
         });
-    int individualized = Math.toIntExact(embryoCount(tenant, mating));
-    int aggregate = dispositions.stream().mapToInt(Disposition::quantity).sum();
     jdbc.update(
         "INSERT INTO mating_completion(organization_id,mating_id,produced_count,individualized_count,aggregate_disposition_count,completed_by,completed_at) VALUES (?,?,?,?,?,?,?)",
         tenant,
