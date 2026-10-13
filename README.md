@@ -2,107 +2,36 @@
 
 ![BovInA](https://i.imgur.com/1UzEy1n.png)
 
-![Java](https://img.shields.io/badge/java-%23ED8B00.svg?style=for-the-badge\&logo=openjdk\&logoColor=white)
-![Spring](https://img.shields.io/badge/spring-%236DB33F.svg?style=for-the-badge\&logo=spring\&logoColor=white)
-![MySQL](https://img.shields.io/badge/mysql-4479A1.svg?style=for-the-badge\&logo=mysql\&logoColor=white)
-![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge\&logo=amazon-aws\&logoColor=white)
-![Swagger](https://img.shields.io/badge/-Swagger-%23Clojure?style=for-the-badge\&logo=swagger\&logoColor=white)
+![Java 21](https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 
-## Project overview
+BovInA is a backend for bovine in vitro embryo production (PIVE). It is being
+developed as a commercial MVP with production-grade attention to security,
+data integrity, traceability, and maintainability.
 
-**BovInA** is a digital platform developed as part of my course completion project (TCC), in collaboration with a colleague.
+## Overview
 
-The project was presented at **MOSTRATEC**, the largest science and technology fair in Latin America, where it won **3rd place in the Computer Science category**.
+The current backend supports animal and farm records, OPU and oocyte collection,
+semen provenance and fertilization, embryo production and evaluation,
+cryostorage and inventory, transfer and pregnancy follow-up, distribution and
+traceability, and document, audit, and contextual compliance foundations.
 
-This repository contains the **backend** of the system, which was the part I was responsible for developing.
+## Architecture and tech stack
 
-The platform focuses on digitizing and optimizing the management of **In Vitro Embryo Production (PIVE)** in cattle. By replacing manual processes with a centralized digital system, BovInA improves the organization, monitoring, and analysis of important stages of the PIVE process, such as oocyte collection, in vitro fertilization, embryo production, embryo transfer, and pregnancy tracking.
+The backend is a **modular monolith** organized by domain capability. Modules
+use `api`, `application`, `domain`, and `infrastructure` packages where those
+responsibilities exist; PostgreSQL is the relational source of truth.
 
-The goal is to provide a more effective tool for managing bovine embryo production, contributing to genetic improvement and reproductive efficiency in the livestock sector.
+The core stack is Java 21, Spring Boot 4.1, Spring Security, Spring Data JPA /
+Hibernate, PostgreSQL 18, Flyway, OpenAPI/Swagger, Maven, Docker Compose, and
+PostgreSQL Testcontainers for integration tests.
 
-## Main features
+## Security and multi-tenancy
 
-* **Animal management**
-
-  * Registration and tracking of donors, receivers, and bulls.
-
-* **Oocyte collection**
-
-  * Recording collections and monitoring total and viable oocytes.
-
-* **Embryo production**
-
-  * Tracking viable embryo production and production efficiency.
-
-* **Embryo transfer**
-
-  * Managing embryo transfer data and related production outcomes.
-
-* **Pregnancy tracking**
-
-  * Monitoring pregnancy results from embryo transfers.
-
-* **Reports and advanced filters**
-
-  * Efficiency in viable embryo production by animal.
-  * Average number of viable oocytes collected per donor.
-  * Best bull and donor combinations.
-  * Production and pregnancy success indicators.
-
-## Tech stack
-
-* **Java 21**
-* **Spring Boot**
-* **Spring Web**
-* **Spring Data JPA / Hibernate**
-* **MySQL**
-* **Swagger / OpenAPI**
-* **Docker / Docker Compose**
-* **AWS EC2 / RDS**
-
-## System architecture
-
-![System Architecture](https://i.imgur.com/FYP72wJ.png)
-
-The system follows a layered backend architecture:
-
-1. **Frontend**
-
-   * Built with HTML, CSS, JavaScript, React, and React Native.
-   * Provides interfaces for data input, visualization, and analysis.
-   * Communicates with the backend through REST APIs.
-
-2. **Backend**
-
-   * Built with Java and Spring Boot.
-   * Exposes REST endpoints for the frontend.
-   * Handles validation, business rules, persistence, and reporting.
-
-3. **Database**
-
-   * MySQL database used to persist animals, collections, productions, transfers, pregnancies, schedules, and related data.
-
-### Backend layers
-
-* **Controllers**
-
-  * Receive HTTP requests and expose the API endpoints.
-
-* **Services**
-
-  * Contain business logic and coordinate application flows.
-
-* **Repositories**
-
-  * Handle database access through Spring Data JPA.
-
-* **Entities**
-
-  * Represent the persistence model mapped to the database.
-
-* **DTOs**
-
-  * Represent request and response objects used by the API.
+The API validates JWTs, resolves user membership and RBAC permissions, and
+isolates data by organization. Tenant-scoped requests select the organization
+with `X-Organization-ID`; the header alone does not grant access.
 
 ## Local backend for frontend development
 
@@ -224,23 +153,11 @@ profile disables Swagger by default, rejects local issuer/JWKS/CORS settings,
 and leaves bootstrap disabled unless explicitly configured for a trusted
 identity. The mock issuer and `dev-token` helper are not part of the API image.
 
-## Refactoring note
+## Project background and evolution
 
-This codebase is currently being refactored to improve code quality, maintainability, consistency, and alignment with modern Java and Spring Boot practices.
-
-The refactor focuses on improvements such as:
-
-* Cleaner service boundaries.
-* Better transaction management.
-* More consistent error handling.
-* Safer validation.
-* Improved DTO usage.
-* Reduced coupling between API contracts and persistence entities.
-* Better configuration practices.
-* Improved Docker-based local development.
-
-The goal of the refactor is to improve the internal quality of the backend while preserving the same core business features of the original BovInA system.
-
-## Project status
-
-BovInA is an academic project originally developed for a TCC and science fair presentation. It remains a valuable backend project for studying Java, Spring Boot, REST APIs, JPA/Hibernate, MySQL, API documentation, Docker, and real-world refactoring practices.
+BovInA began as a course completion project (TCC), developed in collaboration
+with a colleague and presented at **MOSTRATEC**, where it received **3rd place
+in the Computer Science category**. That original project provided the
+foundation for this repository. The backend was subsequently extensively
+refactored and evolved into a more mature, domain-oriented implementation
+being prepared as a commercial MVP, not merely the original academic prototype.
