@@ -6,9 +6,9 @@
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 
-BovInA is a backend for bovine in vitro embryo production (PIVE). It is being
-developed as a commercial MVP with production-grade attention to security,
-data integrity, traceability, and maintainability.
+BovInA is a backend for bovine in vitro embryo production (PIVE), currently
+being evolved into a commercial MVP with a strong focus on security, data
+integrity, traceability, and maintainability.
 
 ## Overview
 
@@ -60,15 +60,16 @@ The default local URLs are:
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Local token issuer: http://localhost:8090/default
 
-The API and mock issuer are published only on host loopback. The API container
-fetches public signing keys at `http://dev-auth:8080/default/jwks` on the
-Compose network; `localhost` inside that container is **not** the host.
+The API and mock issuer are published only on host loopback.
 
 ### Frontend quick start
 
 ```bash
 JWT="$(./scripts/dev-token)"
 ```
+
+This stores the token in your current shell. Copy its value into the
+frontend's local development authentication configuration or state.
 
 On a fresh database, bootstrap the first organization once using the request
 below and save its `organizationId`. For normal tenant-scoped requests from
