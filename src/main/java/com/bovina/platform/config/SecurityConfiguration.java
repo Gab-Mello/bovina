@@ -3,6 +3,8 @@ package com.bovina.platform.config;
 import com.bovina.platform.api.ApiProblems;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -42,6 +44,17 @@ public class SecurityConfiguration {
   }
 
   @Bean
+  @Profile("dev")
+  @Order(1)
+  SecurityFilterChain developmentApiDocumentation(HttpSecurity http) throws Exception {
+    return http.securityMatcher(
+            "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**")
+        .authorizeHttpRequests(requests -> requests.anyRequest().permitAll())
+        .build();
+  }
+
+  @Bean
+  @Order(2)
   SecurityFilterChain securityFilterChain(HttpSecurity http, ApiProblems problems)
       throws Exception {
     AuthenticationEntryPoint unauthenticated =
