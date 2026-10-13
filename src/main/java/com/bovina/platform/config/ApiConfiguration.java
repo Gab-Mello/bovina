@@ -17,14 +17,16 @@ public class ApiConfiguration {
   CorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
     var cors = new CorsConfiguration();
     cors.setAllowedOrigins(properties.allowedOrigins());
-    cors.setAllowedMethods(List.of("GET", "POST"));
+    cors.setAllowedMethods(List.of("GET", "POST", "PUT"));
     cors.setAllowedHeaders(
         List.of(
             "Authorization",
             "Content-Type",
             "X-Organization-ID",
             "X-Correlation-ID",
-            "Idempotency-Key"));
+            "Idempotency-Key",
+            "X-File-Name",
+            "X-Source-Document-ID"));
     cors.setExposedHeaders(List.of("Location", "X-Correlation-ID", "ETag"));
     cors.setAllowCredentials(false);
     var source = new UrlBasedCorsConfigurationSource();

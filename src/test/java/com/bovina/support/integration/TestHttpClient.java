@@ -142,13 +142,19 @@ public final class TestHttpClient {
 
   public HttpResponse<String> preflight(String path, String origin, String requestedMethod)
       throws Exception {
+    return preflight(
+        path, origin, requestedMethod, "authorization,idempotency-key,x-organization-id");
+  }
+
+  public HttpResponse<String> preflight(
+      String path, String origin, String requestedMethod, String requestedHeaders)
+      throws Exception {
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
             .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
             .header("Origin", origin)
             .header("Access-Control-Request-Method", requestedMethod)
-            .header(
-                "Access-Control-Request-Headers", "authorization,idempotency-key,x-organization-id")
+            .header("Access-Control-Request-Headers", requestedHeaders)
             .build();
     return IntegrationTestRuntime.HTTP.send(request, HttpResponse.BodyHandlers.ofString());
   }

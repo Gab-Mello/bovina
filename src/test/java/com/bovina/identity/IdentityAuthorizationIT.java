@@ -141,6 +141,29 @@ class IdentityAuthorizationIT extends ClientApiIntegrationTest {
   }
 
   @Test
+  void documentUploadPreflightAllowsOnlyConfiguredOriginAndHeaders() throws Exception {
+    var headers =
+        "authorization,content-type,idempotency-key,x-organization-id,x-file-name,x-source-document-id";
+    var path = "/api/v1/documents/" + id() + "/versions/" + id();
+    var allowed = api.preflight(path, "https://ui.invalid", "PUT", headers);
+    assertThat(allowed.statusCode()).isEqualTo(200);
+    assertThat(allowed.headers().firstValue("Access-Control-Allow-Origin"))
+        .hasValue("https://ui.invalid");
+    assertThat(allowed.headers().firstValue("Access-Control-Allow-Methods"))
+        .hasValueSatisfying(value -> assertThat(value).contains("PUT"));
+    assertThat(allowed.headers().firstValue("Access-Control-Allow-Headers"))
+        .hasValueSatisfying(
+            value ->
+                assertThat(value.toLowerCase(java.util.Locale.ROOT))
+                    .contains("x-file-name", "x-source-document-id"));
+    assertThat(allowed.headers().firstValue("Access-Control-Allow-Credentials")).isEmpty();
+
+    var rejected = api.preflight(path, "https://attacker.invalid", "PUT", headers);
+    assertThat(rejected.statusCode()).isEqualTo(403);
+    assertThat(rejected.headers().firstValue("Access-Control-Allow-Origin")).isEmpty();
+  }
+
+  @Test
   void identityPairAndMembershipAreUniqueAndInvalidGrantsAreRejected() throws Exception {
     var tenant = tenantWithRole("OPERATOR");
     var duplicate =
