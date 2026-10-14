@@ -50,3 +50,4 @@ logs/
 # Local-only refactoring study notes (educational, not source of truth)
 REFACTORING_NOTES.md
 refactoring-notes/
+PIVE_DOMAIN_FLOWS_GUIDE.md
